@@ -288,10 +288,10 @@ class ChessGame:
         print(f'Fullmove: {self.m_fullmove}')
 
     # Plot
-    def plot(self, moves: list[Move] = None, positions: list[int] = None):
+    def plot(self, figsize: tuple[int, int] = (8, 8), moves: list[Move] = None, positions: list[int] = None):
         board = np.ones((8, 8)) - np.indices((8, 8)).sum(axis=0) % 2
 
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
 
         ax.tick_params(axis='both', labelsize=24)
         ax.set_xticks(np.arange(8))
@@ -670,8 +670,13 @@ class ChessGame:
                 for dir in dirs:
                     r2 = r + dir[1]
                     c2 = c + dir[0]
-                    if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and \
-                    (pinned_dir is None or ((pinned_dir[0] != 0 or c2 == c) and (pinned_dir[1] != 0 or r2 == r))):
+                    dr = r2 - r
+                    dc = c2 - c
+                    check_pinned = True
+                    if pinned_dir is not None:
+                        val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                        check_pinned = val == 0
+                    if ChessGame.is_in_bound(r2, c2) and check_pinned:
                         piece2 = self.get_piece(r2 * 8 + c2)
                         if ChessPieces.is_empty(piece2) or ChessPieces.side(piece2) != self.m_current_side:
                             res.append(Move(position, r2 * 8 + c2))
@@ -690,8 +695,13 @@ class ChessGame:
                 # Pawn advance
                 r2 = r + advance_dir[1]
                 c2 = c + advance_dir[0]
-                if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and \
-                (pinned_dir is None or ((pinned_dir[0] != 0 or c2 == c) and (pinned_dir[1] != 0 or r2 == r))):
+                dr = r2 - r
+                dc = c2 - c
+                check_pinned = True
+                if pinned_dir is not None:
+                    val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                    check_pinned = val == 0
+                if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2)
                     if ChessPieces.is_empty(piece2):
                         if is_promoting:
@@ -715,8 +725,13 @@ class ChessGame:
                                     res.append(Move(position, r3 * 8 + c3))
 
                 # Pawn capture
-                if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and \
-                (pinned_dir is None or ((pinned_dir[0] != 0 or c2 == c) and (pinned_dir[1] != 0 or r2 == r))):
+                dr = r2 - r
+                dc = c2 - c + 1
+                check_pinned = True
+                if pinned_dir is not None:
+                    val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                    check_pinned = val == 0
+                if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 - 1)
                     if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
                         if is_promoting:
@@ -738,8 +753,14 @@ class ChessGame:
                                 res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
                             else:
                                 res.append(Move(position, r2 * 8 + c2 - 1,en_passant_target=self.m_en_passant_target))
-                if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and \
-                (pinned_dir is None or ((pinned_dir[0] != 0 or c2 == c) and (pinned_dir[1] != 0 or r2 == r))):
+                
+                dr = r2 - r
+                dc = c2 - c - 1
+                check_pinned = True
+                if pinned_dir is not None:
+                    val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                    check_pinned = val == 0
+                if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 + 1)
                     if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
                         if is_promoting:
