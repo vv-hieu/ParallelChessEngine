@@ -533,6 +533,7 @@ class ChessGame:
                                 break
                             if not ChessPieces.is_empty(piece2) and self.is_side_to_move(piece2):
                                 pinned = r2 * 8 + c2
+                        rd.add(r2 * 8 + c2)
                         i += 1
                     else:
                         break
@@ -564,6 +565,7 @@ class ChessGame:
                                 break
                             if not ChessPieces.is_empty(piece2) and self.is_side_to_move(piece2):
                                 pinned = r2 * 8 + c2
+                        rd.add(r2 * 8 + c2)
                         i += 1
                     else:
                         break
@@ -676,7 +678,7 @@ class ChessGame:
                     if pinned_dir is not None:
                         val = dr * pinned_dir[0] - dc * pinned_dir[1]
                         check_pinned = val == 0
-                    if ChessGame.is_in_bound(r2, c2) and check_pinned:
+                    if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                         piece2 = self.get_piece(r2 * 8 + c2)
                         if ChessPieces.is_empty(piece2) or ChessPieces.side(piece2) != self.m_current_side:
                             res.append(Move(position, r2 * 8 + c2))
@@ -695,11 +697,9 @@ class ChessGame:
                 # Pawn advance
                 r2 = r + advance_dir[1]
                 c2 = c + advance_dir[0]
-                dr = r2 - r
-                dc = c2 - c
                 check_pinned = True
                 if pinned_dir is not None:
-                    val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                    val = advance_dir[1] * pinned_dir[0] - advance_dir[0] * pinned_dir[1]
                     check_pinned = val == 0
                 if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2)
@@ -726,62 +726,45 @@ class ChessGame:
 
                 # Pawn capture
                 dr = r2 - r
-                dc = c2 - c + 1
+                dc = c2 - c - 1
                 check_pinned = True
                 if pinned_dir is not None:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
                     check_pinned = val == 0
+                en_passant = None
+                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2:
+                    en_passant = self.m_en_passant_target
                 if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 - 1)
                     if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
                         if is_promoting:
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side), en_passant_target=en_passant))
                         else:
-                            res.append(Move(position, r2 * 8 + c2 - 1))
-                    if self.m_en_passant_target is not None:
-                        re = self.m_en_passant_target // 8
-                        ce = self.m_en_passant_target - (re * 8)
+                            res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=en_passant))
 
-                        if re == r2 and ce == c2 - 1:
-                            if is_promoting:
-                                res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
-                            else:
-                                res.append(Move(position, r2 * 8 + c2 - 1,en_passant_target=self.m_en_passant_target))
-                
                 dr = r2 - r
                 dc = c2 - c - 1
                 check_pinned = True
                 if pinned_dir is not None:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
                     check_pinned = val == 0
-                if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
-                    piece2 = self.get_piece(r2 * 8 + c2 + 1)
+                en_passant = None
+                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2:
+                    en_passant = self.m_en_passant_target
+                if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
+                    piece2 = self.get_piece(r2 * 8 + c2 - 1)
                     if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
                         if is_promoting:
-                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side), en_passant_target=en_passant))
                         else:
-                            res.append(Move(position, r2 * 8 + c2 + 1))
-                    if self.m_en_passant_target is not None:
-                        re = self.m_en_passant_target // 8
-                        ce = self.m_en_passant_target - (re * 8)
+                            res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=en_passant))
 
-                        if re == r2 and ce == c2 + 1:
-                            if is_promoting:
-                                res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                                res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=self.m_en_passant_target, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
-                            else:
-                                res.append(Move(position, r2 * 8 + c2 + 1,en_passant_target=self.m_en_passant_target))
 
         # TODO: Sort moves from best to worst
         return res
