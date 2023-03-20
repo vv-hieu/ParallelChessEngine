@@ -732,11 +732,11 @@ class ChessGame:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
                     check_pinned = val == 0
                 en_passant = None
-                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2:
+                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2 - 1:
                     en_passant = self.m_en_passant_target
                 if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 - 1)
-                    if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
+                    if en_passant is not None or (ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
                         if is_promoting:
                             res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
                             res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
@@ -746,24 +746,24 @@ class ChessGame:
                             res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=en_passant))
 
                 dr = r2 - r
-                dc = c2 - c - 1
+                dc = c2 - c + 1
                 check_pinned = True
                 if pinned_dir is not None:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
                     check_pinned = val == 0
                 en_passant = None
-                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2:
+                if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2 + 1:
                     en_passant = self.m_en_passant_target
                 if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 - 1)
-                    if ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2):
+                    if en_passant is not None or (ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
                         if is_promoting:
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side), en_passant_target=en_passant))
-                            res.append(Move(position, r2 * 8 + c2 - 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side), en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side), en_passant_target=en_passant))
                         else:
-                            res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=en_passant))
+                            res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=en_passant))
 
 
         # TODO: Sort moves from best to worst
