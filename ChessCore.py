@@ -529,6 +529,7 @@ class ChessGame:
                         else:
                             if piece2 == other_rook or piece2 == other_queen or (piece2 == other_king and i == 1):
                                 rd.add(r2 * 8 + c2)
+                                found = True
                                 break
                             if not ChessPieces.is_empty(piece2) and self.is_side_to_move(piece2):
                                 pinned = r2 * 8 + c2
@@ -559,6 +560,7 @@ class ChessGame:
                         else:
                             if piece2 == other_bishop or piece2 == other_queen or (piece2 == other_king and i == 1):
                                 rd.add(r2 * 8 + c2)
+                                found = True
                                 break
                             if not ChessPieces.is_empty(piece2) and self.is_side_to_move(piece2):
                                 pinned = r2 * 8 + c2
@@ -585,14 +587,12 @@ class ChessGame:
             r = position // 8
             c = position - (r * 8)
 
-            pinned_by = pinned_pieces.get(position)
+            pinned_by = pinned_pieces.get(position, None)
             pinned_dir = None
             if pinned_by is not None:
                 rp = pinned_by // 8
                 cp = pinned_by - (rp * 8)
-                pinned_dir = (1 if cp != c else 0, 1 if rp != r else 0)
-
-            print(pinned_dir)
+                pinned_dir = (cp - c, rp - r)
 
             # Sliding pieces (bishop, rook, queen, king)
             if piece_type == ChessPieces.PIECE_TYPE_BISHOP or \
@@ -614,13 +614,20 @@ class ChessGame:
                             if piece_type == ChessPieces.PIECE_TYPE_KING:
                                 if not self.is_in_check(r2 * 8 + c2, self.m_current_side, exclude=position) and (ChessPieces.is_empty(piece2) or not self.is_side_to_move(piece2)):
                                     res.append(Move(position, r2 * 8 + c2))
-                            elif (required_destinations is None or r2 * 8 + c2 in required_destinations) and \
-                            (pinned_dir is None or ((pinned_dir[0] != 0 or c2 == c) and (pinned_dir[1] != 0 or r2 == r))):
-                                if not ChessPieces.is_empty(piece2):
-                                    if not self.is_side_to_move(piece2):
-                                        res.append(Move(position, r2 * 8 + c2))
-                                    break
-                                res.append(Move(position, r2 * 8 + c2))
+                            else:
+                                if required_destinations is None or r2 * 8 + c2 in required_destinations:
+                                    dr = r2 - r
+                                    dc = c2 - c
+                                    check_pinned = True
+                                    if pinned_dir is not None:
+                                        val = dr * pinned_dir[0] - dc * pinned_dir[1]
+                                        check_pinned = val == 0
+                                    if check_pinned:
+                                        if not ChessPieces.is_empty(piece2):
+                                            if not self.is_side_to_move(piece2):
+                                                res.append(Move(position, r2 * 8 + c2))
+                                            break
+                                    res.append(Move(position, r2 * 8 + c2))
                             i += 1
                         else:
                             break
