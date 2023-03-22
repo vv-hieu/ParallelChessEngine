@@ -804,7 +804,7 @@ class ChessGame:
                 if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2 + 1:
                     en_passant = self.m_en_passant_target
                 if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
-                    piece2 = self.get_piece(r2 * 8 + c2 - 1)
+                    piece2 = self.get_piece(r2 * 8 + c2 + 1)
                     if not self.is_current_side_in_check(exclude=[position, position + 1]) and en_passant is not None or (ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
                         if is_promoting:
                             res.append(Move(position, r2 * 8 + c2 + 1, ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
