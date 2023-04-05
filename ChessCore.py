@@ -93,6 +93,68 @@ class ChessPieces:
     # King has no value
     PIECE_TYPE_VALUES = [ 0.0, 0.0, 1.0, 3.0, 3.0, 5.0, 9.0 ]
 
+    # Piece square tables (https://www.chessprogramming.org/Simplified_Evaluation_Function)
+    PIECE_SQUARE_TABLE_KING   = [
+         0.20,  0.30,  0.10,  0.00,  0.00,  0.10,  0.30,  0.20,
+         0.20,  0.20,  0.00,  0.00,  0.00,  0.00,  0.20,  0.20,
+        -0.10, -0.20, -0.20, -0.20, -0.20, -0.20, -0.20, -0.10,
+        -0.20, -0.30, -0.30, -0.40, -0.40, -0.30, -0.30, -0.20,
+        -0.30, -0.40, -0.40, -0.50, -0.50, -0.40, -0.40, -0.30,
+        -0.30, -0.40, -0.40, -0.50, -0.50, -0.40, -0.40, -0.30,
+        -0.30, -0.40, -0.40, -0.50, -0.50, -0.40, -0.40, -0.30,
+        -0.30, -0.40, -0.40, -0.50, -0.50, -0.40, -0.40, -0.30
+    ]
+    PIECE_SQUARE_TABLE_PAWN   = [
+         0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,
+         0.05,  0.10,  0.10, -0.20, -0.20,  0.10,  0.10,  0.05,
+         0.05, -0.05, -0.10,  0.00,  0.00, -0.10, -0.05,  0.05,
+         0.00,  0.00,  0.00,  0.20,  0.20,  0.00,  0.00,  0.00,
+         0.05,  0.05,  0.10,  0.25,  0.25,  0.10,  0.05,  0.05,
+         0.10,  0.10,  0.20,  0.30,  0.30,  0.20,  0.10,  0.10,
+         0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,  0.50,
+         0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00
+    ]
+    PIECE_SQUARE_TABLE_KNIGHT = [
+        -0.50, -0.40, -0.30, -0.30, -0.30, -0.30, -0.40, -0.50,
+        -0.40, -0.20,  0.00,  0.05,  0.05,  0.00, -0.20, -0.40,
+        -0.30,  0.05,  0.10,  0.15,  0.15,  0.10,  0.05, -0.30,
+        -0.30,  0.00,  0.15,  0.20,  0.20,  0.15,  0.00, -0.30,
+        -0.30,  0.05,  0.15,  0.20,  0.20,  0.15,  0.05, -0.30,
+        -0.30,  0.00,  0.10,  0.15,  0.15,  0.10,  0.00, -0.30,
+        -0.40, -0.20,  0.00,  0.00,  0.00,  0.00, -0.20, -0.40,
+        -0.50, -0.40, -0.30, -0.30, -0.30, -0.30, -0.40, -0.50
+    ]
+    PIECE_SQUARE_TABLE_BISHOP = [
+        -0.20, -0.10, -0.10, -0.10, -0.10, -0.10, -0.10, -0.20,
+        -0.10,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.10,
+        -0.10,  0.00,  0.05,  0.10,  0.10,  0.05,  0.00, -0.10,
+        -0.10,  0.05,  0.05,  0.10,  0.10,  0.05,  0.05, -0.10,
+        -0.10,  0.00,  0.10,  0.10,  0.10,  0.10,  0.00, -0.10,
+        -0.10,  0.10,  0.10,  0.10,  0.10,  0.10,  0.10, -0.10,
+        -0.10,  0.05,  0.00,  0.00,  0.00,  0.00,  0.05, -0.10,
+        -0.20, -0.10, -0.10, -0.10, -0.10, -0.10, -0.10, -0.20
+    ]
+    PIECE_SQUARE_TABLE_ROOK   = [
+          0.00,  0.00,  0.00,  0.05,  0.05,  0.00,  0.00,  0.00,
+         -0.05,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.05,
+         -0.05,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.05,
+         -0.05,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.05,
+         -0.05,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.05,
+         -0.05,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.05,
+          0.05,  0.10,  0.10,  0.10,  0.10,  0.10,  0.10,  0.05,
+          0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00
+    ]
+    PIECE_SQUARE_TABLE_QUEEN  = [
+        -0.20, -0.10, -0.10, -0.05, -0.05, -0.10, -0.10, -0.20,
+        -0.10,  0.00,  0.05,  0.00,  0.00,  0.00,  0.00, -0.10,
+        -0.10,  0.05,  0.05,  0.05,  0.05,  0.05,  0.00, -0.10,
+         0.00,  0.00,  0.05,  0.05,  0.05,  0.05,  0.00, -0.05,
+        -0.05,  0.00,  0.05,  0.05,  0.05,  0.05,  0.00, -0.05,
+        -0.10,  0.00,  0.05,  0.05,  0.05,  0.05,  0.00, -0.10,
+        -0.10,  0.00,  0.00,  0.00,  0.00,  0.00,  0.00, -0.10,
+        -0.20, -0.10, -0.10, -0.05, -0.05, -0.10, -0.10, -0.20
+    ]  
+
     # UTILITY METHODS
 
     # Create piece dynamically
@@ -139,8 +201,32 @@ class ChessPieces:
         return res
 
     # Get piece's value
-    def value(piece: int) -> float:
-        return ChessPieces.PIECE_TYPE_VALUES[ChessPieces.type(piece)]
+    def value(piece: int, position: int = -1) -> float:
+        # Base value
+        base_value = ChessPieces.PIECE_TYPE_VALUES[ChessPieces.type(piece)]
+
+        # Positional value
+        positional_value = 0
+        if position >= 0:
+            r = position // 8
+            c = position % 8
+            if not ChessPieces.side(piece):
+                r = 7 - r
+            position = r * 8 + c
+            if ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_KING:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_KING[position]
+            elif ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_PAWN:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_PAWN[position]
+            elif ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_KNIGHT:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_KNIGHT[position]
+            elif ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_BISHOP:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_BISHOP[position]
+            elif ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_ROOK:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_ROOK[position]
+            elif ChessPieces.type(piece) == ChessPieces.PIECE_TYPE_QUEEN:
+                positional_value = ChessPieces.PIECE_SQUARE_TABLE_QUEEN[position]
+
+        return base_value + positional_value
 
 # Chess game simulates a game of chess
 
@@ -158,18 +244,6 @@ class ChessGame:
     ICON_WB = plt.imread('icons/white_bishop.png')
     ICON_WR = plt.imread('icons/white_rook.png')
     ICON_WQ = plt.imread('icons/white_queen.png')
-
-    # Piece-square tables
-    # PIECE_SQUARE_PAWN = [
-    #      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
-    #      5.0, 10.0, 10.0,-20.0,-20.0, 10.0, 10.0,  5.0,
-    #      5.0, -5.0,-10.0,  0.0,  0.0,-10.0, -5.0,  5.0,
-    #      0.0,  0.0,  0.0, 20.0, 20.0,  0.0,  0.0,  0.0,
-    #      5.0,  5.0, 10.0, 25.0, 25.0, 10.0,  5.0,  5.0,
-    #     10.0, 10.0, 20.0, 30.0, 30.0, 20.0, 10.0, 10.0,
-    #     50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0,
-    #      0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0
-    # ]
 
     # Constructor
     def __init__(self, fen: str = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'):
@@ -933,6 +1007,4 @@ class ChessGame:
     # Black piece gives negative values
     def evaluate_piece(self, position: int) -> float:
         piece = self.get_piece(position)
-        return ChessPieces.value(piece) * (1.0 if self.is_side_to_move(piece) else -1.0)
-
-    
+        return ChessPieces.value(piece, position) * (1.0 if self.is_side_to_move(piece) else -1.0)
