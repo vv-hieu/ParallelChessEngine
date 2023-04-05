@@ -392,10 +392,11 @@ class ChessGame:
         print(f'Fullmove: {self.m_fullmove}')
 
     # Plot
-    def plot(self, figsize: tuple[int, int] = (8, 8), moves: list[Move] = None, positions: list[int] = None):
+    def plot(self, moves: list[Move] = None, positions: list[int] = None, ax: plt.Axes = None):
         board = np.ones((8, 8)) - np.indices((8, 8)).sum(axis=0) % 2
 
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
         ax.tick_params(axis='both', labelsize=24)
         ax.set_xticks(np.arange(8))
