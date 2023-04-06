@@ -279,7 +279,7 @@ def find_move_parallel_1(game: ChessGame, search_depth: int, alpha_beta_prunning
 
     return best_move
 
-# Parallel implementation 2 - PV-Split
+# Parallel implementation 2
 
 def evaluate_move_parallel_2(game: ChessGame, search_depth: int):
     global evaluation_count
