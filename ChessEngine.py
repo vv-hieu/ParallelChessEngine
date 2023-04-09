@@ -437,14 +437,18 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
 
         if side:
             if castle_WK and (attacked_positions & (0x07 << 4)) == 0:
-                count = push_back(out_moves, count, encode_move(4, 6, 0x00, False))
+                if (board[5] & 0x07) == 0 and (board[6] & 0x07) == 0:
+                    count = push_back(out_moves, count, encode_move(4, 6, 0x00, False))
             if castle_WQ and (attacked_positions & (0x07 << 2)) == 0:
-                count = push_back(out_moves, count, encode_move(4, 2, 0x00, False))
+                if (board[1] & 0x07) == 0 and (board[2] & 0x07) == 0 and (board[3] & 0x07) == 0:
+                    count = push_back(out_moves, count, encode_move(4, 2, 0x00, False))
         else:
             if castle_BK and (attacked_positions & (0x07 << 60)) == 0:
-                count = push_back(out_moves, count, encode_move(60, 62, 0x00, False))
+                if (board[61] & 0x07) == 0 and (board[62] & 0x07) == 0:
+                    count = push_back(out_moves, count, encode_move(60, 62, 0x00, False))
             if castle_BQ and (attacked_positions & (0x07 << 58)) == 0:
-                count = push_back(out_moves, count, encode_move(60, 58, 0x00, False))
+                if (board[57] & 0x07) == 0 and (board[58] & 0x07) == 0 and (board[59] & 0x07) == 0:
+                    count = push_back(out_moves, count, encode_move(60, 58, 0x00, False))
 
     return count
 
