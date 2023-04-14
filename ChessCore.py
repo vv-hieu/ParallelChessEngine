@@ -7,22 +7,27 @@ import numpy as np
 # Move contains start and end position
 
 class Move:
-    def __init__(self, start_position: int, end_position: int, en_passant_target: int = None, promote_to: int = None):
+    def __init__(self, 
+        start_position, 
+        end_position, 
+        en_passant_target = None, 
+        promote_to        = None
+    ):
         self.m_start_position    = start_position
         self.m_end_position      = end_position
         self.m_en_passant_target = en_passant_target
         self.m_promote_to        = promote_to
         
-    def start_position(self) -> int:
+    def start_position(self):
         return self.m_start_position    
 
-    def end_position(self) -> int:
+    def end_position(self):
         return self.m_end_position    
     
-    def en_passant_target(self) -> int:
+    def en_passant_target(self):
         return self.m_en_passant_target
 
-    def promote_to(self) -> int:
+    def promote_to(self):
         return self.m_promote_to
 
 # Chess pieces are represented using 4 bits:
@@ -158,24 +163,36 @@ class ChessPieces:
     # UTILITY METHODS
 
     # Create piece dynamically
-    def piece(type: int, side: bool) -> int:
+    def piece(
+        type, 
+        side
+    ):
         return type | (ChessPieces.PIECE_SIDE_WHITE if side else ChessPieces.PIECE_SIDE_BLACK)
 
     # Check if piece is empty
-    def is_empty(piece: int) -> bool:
+    def is_empty(
+        piece
+    ):
         return piece & ChessPieces.PIECE_TYPE_MASK == ChessPieces.PIECE_EMPTY
 
     # Check which side the piece belongs to
     # True: white, False: black
-    def side(piece: int) -> bool:
+    def side(
+        piece
+    ):
         return piece & ChessPieces.PIECE_SIDE_WHITE == ChessPieces.PIECE_SIDE_WHITE
 
     # Get piece's type
-    def type(piece: int) -> int:
+    def type(
+        piece 
+    ):
         return piece & ChessPieces.PIECE_TYPE_MASK
 
     # Get piece's name, including which side the piece belongs to
-    def name(piece: int, notation: bool = False) -> str:
+    def name(
+        piece, 
+        notation = False
+    ):
         if ChessPieces.is_empty(piece):
             if notation:
                 return ' ' + ChessPieces.PIECE_TYPES_NOTATIONS[0]
@@ -201,7 +218,10 @@ class ChessPieces:
         return res
 
     # Get piece's value
-    def value(piece: int, position: int = -1) -> float:
+    def value(
+        piece, 
+        position = -1
+    ):
         # Base value
         base_value = ChessPieces.PIECE_TYPE_VALUES[ChessPieces.type(piece)]
 
@@ -246,7 +266,9 @@ class ChessGame:
     ICON_WQ = plt.imread('icons/white_queen.png')
 
     # Constructor
-    def __init__(self, fen: str = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'):
+    def __init__(self, 
+        fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'
+    ):
         fen_components = fen.split(' ')
 
         # Piece placements
@@ -392,7 +414,11 @@ class ChessGame:
         print(f'Fullmove: {self.m_fullmove}')
 
     # Plot
-    def plot(self, moves: list[Move] = None, positions: list[int] = None, ax: plt.Axes = None):
+    def plot(self, 
+        moves     = None, 
+        positions = None, 
+        ax        = None
+    ):
         board = np.ones((8, 8)) - np.indices((8, 8)).sum(axis=0) % 2
 
         if ax is None:
@@ -460,19 +486,29 @@ class ChessGame:
         return self.m_current_side
 
     # Check if a piece belongs to the current side to move
-    def is_side_to_move(self, piece: int) -> bool:
+    def is_side_to_move(self, 
+        piece
+    ):
         return ChessPieces.side(piece) == self.m_current_side
 
+    # Set board
+    def set_board(self, board: list[int]):
+        self.m_board = list(board)
+
     # Get entire board
-    def get_board(self) -> list[int]:
+    def get_board(self):
         return self.m_board + []
 
     # Get a piece at a position
-    def get_piece(self, position: int) -> int:
+    def get_piece(self, 
+        position
+    ):
         return self.m_board[position]
 
     # Get king position
-    def get_king_position(self, side: bool) -> int:
+    def get_king_position(self, 
+        side
+    ):
         king = ChessPieces.WK if side else ChessPieces.BK
         for i in range(64):
             if self.get_piece(i) == king:
@@ -488,14 +524,22 @@ class ChessGame:
         return self.m_fullmove
 
     # Check if a position is in bound
-    def is_in_bound(r: int, c: int) -> bool:
+    def is_in_bound(
+        r, 
+        c
+    ):
         if r < 0 or r >= 8 or c < 0 or c >= 8:
             return False
         
         return True
 
     # Check if a position is currently in check
-    def is_in_check(self, position: int, side: bool, exclude: list[int] = None, include: list[int] = None) -> bool:
+    def is_in_check(self, 
+        position, 
+        side, 
+        exclude = None,
+        include = None
+    ):
         r = position // 8
         c = position % 8
 
@@ -569,12 +613,15 @@ class ChessGame:
         return False
 
     # Check if current side is in check
-    def is_current_side_in_check(self, exclude: list[int] = None, include: list[int] = None) -> bool:
+    def is_current_side_in_check(self, 
+        exclude = None, 
+        include = None
+    ):
         king_position = self.get_king_position(self.m_current_side)
         return self.is_in_check(king_position, self.m_current_side, exclude=exclude, include=include)
 
     # Generate all possible moves
-    def generate_all_moves(self) -> list[Move]:
+    def generate_all_moves(self):
         if self.m_halfmove >= 100:
             return []
 
@@ -714,7 +761,12 @@ class ChessGame:
         return res
 
     # Generate all possible moves of a single piece
-    def generate_moves(self, piece: int, position: int, required_destinations: list[int] = None, pinned_pieces: dict[int, int] = {}) -> list[Move]:
+    def generate_moves(self, 
+        piece, 
+        position, 
+        required_destinations = None, 
+        pinned_pieces         = {}
+    ):
         res = []
         if self.is_side_to_move(piece) and not ChessPieces.is_empty(piece):
             piece_type = ChessPieces.type(piece)
@@ -761,7 +813,9 @@ class ChessGame:
                                         if check_pinned and not self.is_side_to_move(piece2):
                                             res.append(Move(position, r2 * 8 + c2))
                                         break
-                                    res.append(Move(position, r2 * 8 + c2))
+                                    else:
+                                        if check_pinned:
+                                            res.append(Move(position, r2 * 8 + c2))
                                 if not ChessPieces.is_empty(piece2):
                                     break
                             i += 1
@@ -782,7 +836,8 @@ class ChessGame:
                             not self.is_in_check(3, True) and \
                             not self.is_in_check(2, True) and \
                             ChessPieces.is_empty(self.get_piece(3)) and \
-                            ChessPieces.is_empty(self.get_piece(2)):
+                            ChessPieces.is_empty(self.get_piece(2)) and \
+                            ChessPieces.is_empty(self.get_piece(1)):
                                 res.append(Move(4, 2))
                     else:
                         if self.m_castle_BK:
@@ -797,7 +852,8 @@ class ChessGame:
                             not self.is_in_check(59, False) and \
                             not self.is_in_check(58, False) and \
                             ChessPieces.is_empty(self.get_piece(59)) and \
-                            ChessPieces.is_empty(self.get_piece(58)):
+                            ChessPieces.is_empty(self.get_piece(58)) and \
+                            ChessPieces.is_empty(self.get_piece(57)):
                                 res.append(Move(60, 58))
                         
             # Knights
@@ -835,32 +891,27 @@ class ChessGame:
                 if pinned_dir is not None:
                     val = advance_dir[1] * pinned_dir[0] - advance_dir[0] * pinned_dir[1]
                     check_pinned = val == 0
-                if ChessGame.is_in_bound(r2, c2) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
+                if ChessGame.is_in_bound(r2, c2):
                     piece2 = self.get_piece(r2 * 8 + c2)
                     if ChessPieces.is_empty(piece2):
-                        if is_promoting:
-                            res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                            res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
-                        else:
-                            res.append(Move(position, r2 * 8 + c2))
+                        if (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
+                            if is_promoting:
+                                res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.    m_current_side)))
+                                res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.    m_current_side)))
+                                res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.  m_current_side)))
+                                res.append(Move(position, r2 * 8 + c2, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self. m_current_side)))
+                            else:
+                                res.append(Move(position, r2 * 8 + c2))
                         r3 = r + advance_dir[1] * 2
                         c3 = c + advance_dir[0] * 2
                         if double and ChessGame.is_in_bound(r3, c3):
                             piece3 = self.get_piece(r3 * 8 + c3)
-                            if ChessPieces.is_empty(piece3):
-                                if is_promoting:
-                                    res.append(Move(position, r3 * 8 + c3, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side)))
-                                    res.append(Move(position, r3 * 8 + c3, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side)))
-                                    res.append(Move(position, r3 * 8 + c3, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_ROOK, self.m_current_side)))
-                                    res.append(Move(position, r3 * 8 + c3, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_QUEEN, self.m_current_side)))
-                                else:
-                                    res.append(Move(position, r3 * 8 + c3))
+                            if ChessPieces.is_empty(piece3) and (required_destinations is None or r3 * 8 + c3 in required_destinations) and check_pinned:
+                                res.append(Move(position, r3 * 8 + c3))
 
                 # Pawn capture
-                dr = r2 - r
-                dc = c2 - c - 1
+                dr = advance_dir[1]
+                dc = -1
                 check_pinned = True
                 if pinned_dir is not None:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
@@ -868,9 +919,9 @@ class ChessGame:
                 en_passant = None
                 if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2 - 1:
                     en_passant = self.m_en_passant_target
-                if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
+                if ChessGame.is_in_bound(r2, c2 - 1) and (required_destinations is None or r2 * 8 + c2 - 1 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 - 1)
-                    if not self.is_current_side_in_check(exclude=[position, position + 1], include=[r2 * 8 + c2 - 1]) and en_passant is not None or (ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
+                    if (en_passant is not None and not self.is_current_side_in_check(exclude=[position, position - 1], include=[r2 * 8 + c2 - 1]))or (en_passant is None and ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
                         if is_promoting:
                             res.append(Move(position, r2 * 8 + c2 - 1, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
                             res.append(Move(position, r2 * 8 + c2 - 1, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
@@ -879,8 +930,8 @@ class ChessGame:
                         else:
                             res.append(Move(position, r2 * 8 + c2 - 1, en_passant_target=en_passant))
 
-                dr = r2 - r
-                dc = c2 - c + 1
+                dr = advance_dir[1]
+                dc = 1
                 check_pinned = True
                 if pinned_dir is not None:
                     val = dr * pinned_dir[0] - dc * pinned_dir[1]
@@ -888,9 +939,9 @@ class ChessGame:
                 en_passant = None
                 if self.m_en_passant_target is not None and self.m_en_passant_target == r2 * 8 + c2 + 1:
                     en_passant = self.m_en_passant_target
-                if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 in required_destinations) and check_pinned:
+                if ChessGame.is_in_bound(r2, c2 + 1) and (required_destinations is None or r2 * 8 + c2 + 1 in required_destinations) and check_pinned:
                     piece2 = self.get_piece(r2 * 8 + c2 + 1)
-                    if not self.is_current_side_in_check(exclude=[position, position + 1], include=[r2 * 8 + c2 + 1]) and en_passant is not None or (ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
+                    if (en_passant is not None and not self.is_current_side_in_check(exclude=[position, position + 1], include=[r2 * 8 + c2 + 1]))or (en_passant is None and ChessPieces.side(piece2) != self.m_current_side and not ChessPieces.is_empty(piece2)):
                         if is_promoting:
                             res.append(Move(position, r2 * 8 + c2 + 1, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_KNIGHT, self.m_current_side), en_passant_target=en_passant))
                             res.append(Move(position, r2 * 8 + c2 + 1, promote_to=ChessPieces.piece(ChessPieces.PIECE_TYPE_BISHOP, self.m_current_side), en_passant_target=en_passant))
@@ -899,11 +950,12 @@ class ChessGame:
                         else:
                             res.append(Move(position, r2 * 8 + c2 + 1, en_passant_target=en_passant))
 
-        # TODO: Sort moves from best to worst
         return res
 
     # Make a move
-    def move(self, move: Move) -> int:
+    def move(self, 
+        move
+    ):
         r1 = move.start_position() // 8
         c1 = move.start_position() % 8
         r2 = move.end_position() // 8
@@ -912,8 +964,8 @@ class ChessGame:
         piece1 = self.get_piece(move.start_position())
         piece2 = self.get_piece(move.end_position())
 
-        self.m_board[move.end_position()]   = piece1
         self.m_board[move.start_position()] = ChessPieces._E
+        self.m_board[move.end_position()]   = piece1
 
         res = piece2
 
@@ -926,8 +978,8 @@ class ChessGame:
             r = move.en_passant_target() // 8 + (-1 if ChessPieces.side(piece1) else 1)
             c = move.en_passant_target() % 8
 
-            self.m_board[r * 8 + c] = ChessPieces._E
             res = self.get_piece(r * 8 + c)
+            self.m_board[r * 8 + c] = ChessPieces._E
 
         # Castling
         piece1_type = ChessPieces.type(piece1)
@@ -974,14 +1026,14 @@ class ChessGame:
                     self.m_castle_WQ = False
 
         # Update en passant target
-        if piece1_type == ChessPieces.PIECE_TYPE_PAWN and c1 == c2 and (r2 - r1 == (2 if self.m_current_side else -2)):
-            self.m_en_passant_target = (r2 + (-1 if self.m_current_side else 1)) * 8 + c2
+        if piece1_type == ChessPieces.PIECE_TYPE_PAWN and c1 == c2 and (r2 - r1 == 2 or r2 - r1 == -2):
+            self.m_en_passant_target = move.end_position() + (-8 if self.m_current_side else 8)
         else:
             self.m_en_passant_target = None
 
         # Reset halfmove clock if necessary
         pawn_advanced = piece1_type == ChessPieces.PIECE_TYPE_PAWN
-        captured      = not ChessPieces.is_empty(piece2)
+        captured      = not ChessPieces.is_empty(res)
         if pawn_advanced or captured:
             self.m_halfmove = 0
         else:
@@ -997,7 +1049,7 @@ class ChessGame:
         return res
 
     # Evaluate the board
-    def evaluate(self) -> float:
+    def evaluate(self):
         res = 0.0
         for i in range(64):
             res += self.evaluate_piece(i)
@@ -1006,6 +1058,8 @@ class ChessGame:
     # Evaluate a piece
     # White piece gives positive values
     # Black piece gives negative values
-    def evaluate_piece(self, position: int) -> float:
+    def evaluate_piece(self, 
+        position
+    ):
         piece = self.get_piece(position)
         return ChessPieces.value(piece, position) * (1.0 if self.is_side_to_move(piece) else -1.0)

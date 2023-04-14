@@ -1,7 +1,7 @@
 from ChessCore import *
 from numba import cuda, types
 
-# Profiling stuff
+# Profiling
 
 def get_evaluation_count():
     global evaluation_count
@@ -9,17 +9,60 @@ def get_evaluation_count():
 
 # Move sorting
 
-def move_score(game: ChessGame, move: Move):
+def move_score(
+    game, 
+    move
+):
     res = 0.0
     capture = game.get_piece(move.end_position())
     if capture != ChessPieces._E:
         res = 10.0 * ChessPieces.value(capture) - ChessPieces.value(game.get_piece(move.start_position()))
     return res
 
-def sort_moves(game: ChessGame, moves: list[Move], best_to_worst: bool = True) -> list[Move]:
+def sort_moves(
+    game, 
+    moves, 
+    best_to_worst = True
+):
     res = moves + []
-    res.sort(key=lambda move: move_score(game, move), reverse=best_to_worst)
+    res.sort(key = lambda move: move_score(game, move), reverse = best_to_worst)
     return res
+
+# Device-side move encoding and decoding
+
+@cuda.jit(device = True, inline = True)
+def encode_move_device(
+    start_position, 
+    end_position, 
+    promote_to, 
+    en_passant
+):
+    if promote_to > 0:
+        promote_to -= 2
+
+    res = 0x00
+
+    res |= (start_position & 0xFF) << 0 
+    res |= (end_position   & 0xFF) << 8
+    res |= promote_to << 16
+    res |= (1 if en_passant else 0) << 19
+
+    return res
+
+@cuda.jit(device = True, inline = True)
+def decode_move_device(
+    move,
+    side
+):
+    start_position = (move >>  0) & 0xFF
+    end_position   = (move >>  8) & 0xFF
+    promote_to     = (move >> 16) & 0x07
+    en_passant     = (move >> 19) & 0x01 != 0
+
+    if promote_to != 0x00:
+        promote_to = (promote_to + 2) | (0x08 if side else 0x00)
+        
+    return start_position, end_position, promote_to, en_passant
 
 # Device-side piece value function
 
@@ -31,15 +74,18 @@ piece_square_table_bishop = np.array(ChessPieces.PIECE_SQUARE_TABLE_BISHOP, dtyp
 piece_square_table_rook   = np.array(ChessPieces.PIECE_SQUARE_TABLE_ROOK  , dtype=float)
 piece_square_table_queen  = np.array(ChessPieces.PIECE_SQUARE_TABLE_QUEEN , dtype=float)
 
-@cuda.jit(device=True)
-def piece_value_device(piece: int, position: int, 
-piece_base_values, 
-piece_square_table_king, 
-piece_square_table_pawn, 
-piece_square_table_knight, 
-piece_square_table_bishop, 
-piece_square_table_rook, 
-piece_square_table_queen):
+@cuda.jit(device = True)
+def piece_value_device(
+    piece,
+    position, 
+    piece_base_values, 
+    piece_square_table_king, 
+    piece_square_table_pawn, 
+    piece_square_table_knight, 
+    piece_square_table_bishop, 
+    piece_square_table_rook, 
+    piece_square_table_queen
+):
     piece_type = piece & 0x07
     piece_side = piece & 0x08
 
@@ -69,51 +115,50 @@ piece_square_table_queen):
 
 # Device-side move generation function
 
-@cuda.jit(device=True, inline=True)
-def is_in_bound_device(r: int, c: int):
+@cuda.jit(device = True, inline = True)
+def is_in_bound_device(
+    r: int, 
+    c: int
+):
     return r >= 0 and r < 8 and c >= 0 and c < 8
 
-@cuda.jit(device=True)
-def push_back(list, list_count, value):
+@cuda.jit(device = True, inline = True)
+def push_back_device(
+    list, 
+    list_count, 
+    value
+):
     list[list_count] = value
     return list_count + 1
 
-@cuda.jit(device=True, inline=True)
-def encode_move(start_position: int, end_position: int, promote_to: int, en_passant: bool):
-    if promote_to > 0:
-        promote_to -= 2
-
-    res = 0x00
-
-    res |= (start_position & 0xFF) << 0 
-    res |= (end_position   & 0xFF) << 8
-    res |= promote_to << 16
-    res |= (1 if en_passant else 0) << 19
-
-    return res
-
-@cuda.jit(device=True, inline=True)
-def decode_move(move: int):
-    start_position = (move >>  0) & 0xFF
-    end_position   = (move >>  8) & 0xFF
-    promote_to     = (move >> 16) & 0x07
-    en_passant     = (move >> 19) & 0x01 > 0
-
-    if promote_to > 0:
-        promote_to += 2
-
-    return start_position, end_position, promote_to, en_passant
-
-@cuda.jit(device=True)
-def get_king_position_device(board, side: bool):
+@cuda.jit(device = True)
+def get_king_position_device(
+    board, 
+    side
+):
     king = (0x08 | 0x01) if side else 0x01
     for i in range(64):
         if board[i] == king:
             return i
     return -1
 
-@cuda.jit(device=True)
-def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, castle_BK: bool, castle_BQ: bool, en_passant_target: int, king_position: int, position: int, required_destinations: int, pinned_pieces: int, attacked_positions: int, count: int, out_moves):
+@cuda.jit(device = True)
+def generate_moves_device(
+    board, 
+    side, 
+    castle_WK, 
+    castle_WQ, 
+    castle_BK, 
+    castle_BQ, 
+    en_passant_target, 
+    king_position, 
+    position, 
+    required_destinations, 
+    pinned_pieces, 
+    attacked_positions, 
+    count, 
+    out_moves
+):
     piece = board[position]
     piece_side = (piece & 0x08 != 0)
     piece_type = piece & 0x07
@@ -137,10 +182,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r - i, c):
@@ -150,10 +195,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r, c + i):
@@ -163,10 +208,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r, c - i):
@@ -176,10 +221,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
 
     if piece_type == 0x04 or piece_type == 0x06: # Bishop or queen
@@ -191,10 +236,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r - i, c + i):
@@ -204,10 +249,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r + i, c - i):
@@ -217,10 +262,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
         i = 1
         while is_in_bound_device(r - i, c - i):
@@ -230,10 +275,10 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 != 0:
                 if side != (piece2 & 0x08 != 0):
                     if valid:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 break
             if valid:
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
             i += 1
 
     if piece_type == 0x03: # Knight
@@ -242,49 +287,49 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 2, c + 1):
             position2 = (r - 2) * 8 + c + 1
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r + 2, c - 1):
             position2 = (r + 2) * 8 + c - 1
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 2, c - 1):
             position2 = (r - 2) * 8 + c - 1
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r + 1, c + 2):
             position2 = (r + 1) * 8 + c + 2
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 1, c + 2):
             position2 = (r - 1) * 8 + c + 2
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r + 1, c - 2):
             position2 = (r + 1) * 8 + c - 2
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 1, c - 2):
             position2 = (r - 1) * 8 + c - 2
             piece2 = board[position2]
             valid = required_destinations & (1 << position2) != 0 and unpinned
             if valid and (piece2 & 0x07 == 0 or side != (piece2 & 0x08 != 0)):
-                count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
 
     if piece_type == 0x02: # Pawn
         first_r = 1 if side else 6
@@ -298,18 +343,18 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if piece2 & 0x07 == 0:
                 if valid:
                     if r + pawn_dr == last_r:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x03, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x04, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x05, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x06, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x03, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x04, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x05, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x06, False))
                     else:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 if r == first_r:
                     position3 = (r + pawn_dr * 2) * 8 + c
                     piece3 = board[position3]
                     valid = required_destinations & (1 << position3) != 0 and (unpinned or king_c == c)
                     if valid and piece3 & 0x07 == 0:
-                        count = push_back(out_moves ,count, encode_move(position, position3, 0x00, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position3, 0x00, False))
         if is_in_bound_device(r + pawn_dr, c - 1):
             position2 = (r + pawn_dr) * 8 + c - 1
             piece2 = board[position2]
@@ -317,12 +362,12 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if valid:
                 if piece2 & 0x07 != 0 and side != (piece2 & 0x08 != 0):
                     if r + pawn_dr == last_r:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x03, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x04, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x05, False))
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x06, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x03, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x04, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x05, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x06, False))
                     else:
-                        count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
                 if position2 == en_passant_target:
                     left, right = 0, 0
                     i = c - 2
@@ -346,7 +391,7 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
                             break
                         i += 1
                     if left + right != 3:
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x00, True))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, True))
         if is_in_bound_device(r + pawn_dr, c + 1):
             position2 = (r + pawn_dr) * 8 + c + 1
             piece2 = board[position2]
@@ -354,12 +399,12 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             if valid:
                 if piece2 & 0x07 != 0 and side != (piece2 & 0x08 != 0):
                     if r + pawn_dr == last_r:
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x03, False))
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x04, False))
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x05, False))
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x06, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x03, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x04, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x05, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x06, False))
                     else:
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x00, False))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, False))
                 if position2 == en_passant_target:
                     left, right = 0, 0
                     i = c - 1
@@ -383,7 +428,7 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
                             break
                         i += 1
                     if left + right != 3:
-                        count = push_back(out_moves ,count, encode_move(position, position2, 0x00, True))
+                        count = push_back_device(out_moves ,count, encode_move_device(position, position2, 0x00, True))
 
     if piece_type == 0x01: # King
         if is_in_bound_device(r + 1, c + 1):
@@ -391,71 +436,81 @@ def generate_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, c
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r + 1, c):
             position2 = (r + 1) * 8 + c
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r + 1, c - 1):
             position2 = (r + 1) * 8 + c - 1
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r, c + 1):
             position2 = r * 8 + c + 1
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r, c - 1):
             position2 = r * 8 + c - 1
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 1, c + 1):
             position2 = (r - 1) * 8 + c + 1
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 1, c):
             position2 = (r - 1) * 8 + c
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
         if is_in_bound_device(r - 1, c - 1):
             position2 = (r - 1) * 8 + c - 1
             piece2 = board[position2]
             valid = attacked_positions & (1 << position2) == 0
             if valid and (side != (piece2 & 0x08 != 0) or piece2 & 0x07 == 0):
-                count = push_back(out_moves, count, encode_move(position, position2, 0x00, False))
+                count = push_back_device(out_moves, count, encode_move_device(position, position2, 0x00, False))
 
         if side:
             if castle_WK and (attacked_positions & (0x07 << 4)) == 0:
                 if (board[5] & 0x07) == 0 and (board[6] & 0x07) == 0:
-                    count = push_back(out_moves, count, encode_move(4, 6, 0x00, False))
+                    count = push_back_device(out_moves, count, encode_move_device(4, 6, 0x00, False))
             if castle_WQ and (attacked_positions & (0x07 << 2)) == 0:
                 if (board[1] & 0x07) == 0 and (board[2] & 0x07) == 0 and (board[3] & 0x07) == 0:
-                    count = push_back(out_moves, count, encode_move(4, 2, 0x00, False))
+                    count = push_back_device(out_moves, count, encode_move_device(4, 2, 0x00, False))
         else:
             if castle_BK and (attacked_positions & (0x07 << 60)) == 0:
                 if (board[61] & 0x07) == 0 and (board[62] & 0x07) == 0:
-                    count = push_back(out_moves, count, encode_move(60, 62, 0x00, False))
+                    count = push_back_device(out_moves, count, encode_move_device(60, 62, 0x00, False))
             if castle_BQ and (attacked_positions & (0x07 << 58)) == 0:
                 if (board[57] & 0x07) == 0 and (board[58] & 0x07) == 0 and (board[59] & 0x07) == 0:
-                    count = push_back(out_moves, count, encode_move(60, 58, 0x00, False))
+                    count = push_back_device(out_moves, count, encode_move_device(60, 58, 0x00, False))
 
     return count
 
-@cuda.jit(device=True)
-def generate_all_moves_device(board, side: bool, castle_WK: bool, castle_WQ: bool, castle_BK: bool, castle_BQ: bool, en_passant_target: int, halfmoves: int, out_moves):
+@cuda.jit(device = True)
+def generate_all_moves_device(
+    board, 
+    side, 
+    castle_WK, 
+    castle_WQ, 
+    castle_BK, 
+    castle_BQ, 
+    en_passant_target, 
+    halfmoves, 
+    out_moves
+):
     if halfmoves >= 100:
-        return 0
+        return 0, types.int64(0x0000000000000000)
 
     required_destinations = types.int64(0xffffffffffffffff) # 64-bit int
     pinned_pieces         = types.int64(0x0000000000000000) # 64-bit int
@@ -820,15 +875,116 @@ def generate_all_moves_device(board, side: bool, castle_WK: bool, castle_WQ: boo
     count = 0
     for i in range(64):
         count = generate_moves_device(board, side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, king_position, i, required_destinations, pinned_pieces, attacked_positions, count, out_moves)
-    return count
+    return count, attacked_positions
+
+# Make a move on the GPU
+
+@cuda.jit(device = True)
+def move_device(
+    board,
+    side, 
+    move,
+    castle_WK, 
+    castle_WQ, 
+    castle_BK, 
+    castle_BQ, 
+    en_passant_target,
+    halfmove
+):
+    captured_piece = 0x00
+
+    start_position, end_position, promote_to, en_passant = decode_move_device(move, side)
+
+    r1 = start_position // 8
+    c1 = start_position % 8
+    r2 = end_position // 8
+    c2 = end_position % 8
+
+    piece1 = board[start_position]
+    piece2 = board[end_position]
+
+    captured_piece = piece2
+
+    board[start_position] = 0x00
+    board[end_position]   = piece1
+
+    if promote_to != 0x00:
+        board[end_position] = promote_to
+
+    if en_passant:
+        re = r2 + (-1 if side else 1)
+        ce = c2
+        captured_piece = board[re * 8 + ce]
+        board[re * 8 + ce] = 0x00
+
+    if (piece1 & 0x07) == 0x01:
+        dc = c2 - c1
+        if dc == 2:
+            board[start_position + 3] = 0x00
+            board[start_position + 1] = (0x08 if side else 0x00) | 0x05
+        elif dc == -2:
+            board[start_position - 4] = 0x00
+            board[start_position - 1] = (0x08 if side else 0x00) | 0x05
+
+        if side:
+            castle_WK = False
+            castle_WQ = False
+        else:
+            castle_BK = False
+            castle_BQ = False
+    elif (piece1 & 0x07) == 0x05:
+        if side:
+            if c1 == 7:
+                castle_WK = False
+            elif c1 == 0:
+                castle_WQ = False
+        else:
+            if c1 == 7:
+                castle_BK = False
+            elif c1 == 0:
+                castle_BQ = False
+
+    if (piece2 & 0x07) == 0x05:
+        if side:
+            if c2 == 7:
+                castle_BK = False
+            elif c2 == 0:
+                castle_BQ = False
+        else:
+            if c2 == 7:
+                castle_WK = False
+            elif c2 == 0:
+                castle_WQ = False
+
+    if (piece1 & 0x07) == 0x02 and c1 == c2 and (r2 - r1 == 2 or r2 - r1 == -2):
+        en_passant_target = end_position + (-8 if side else 8)
+    else:
+        en_passant_target = -1
+
+    pawn_advanced = (piece1 & 0x07) == 0x02
+    captured      = (captured_piece & 0x07) != 0x00
+    if pawn_advanced or captured:
+        halfmove = 0
+    else:
+        halfmove += 1
+
+    side = not side
+
+    return side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, halfmove
 
 # Sequential implementation
 # Options: alpha_beta_prunning : Enable/disable alpha beta pruning
 #          move_sorting        : Enable/disable move sorting
 
-def evaluate_move_sequential(game: ChessGame, search_depth: int, alpha: float, beta: float, alpha_beta_prunning: bool = False, move_sorting: bool = False) -> float:
+def evaluate_move_sequential(
+    game, 
+    search_depth, 
+    alpha, 
+    beta, 
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
     global evaluation_count
-    
     evaluation_count += 1
 
     if search_depth <= 0:
@@ -860,13 +1016,18 @@ def evaluate_move_sequential(game: ChessGame, search_depth: int, alpha: float, b
 
     return alpha
 
-def find_move_sequencial(game: ChessGame, search_depth: int, alpha_beta_prunning: bool = False, move_sorting: bool = False):
+def find_move_sequencial(
+    game, 
+    search_depth, 
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
     global evaluation_count
     evaluation_count = 1
 
     moves = game.generate_all_moves()
     if moves is None or len(moves) <= 0:
-        return None
+        return None, 0.0
 
     if move_sorting:
         moves = sort_moves(game, moves, best_to_worst=True)
@@ -883,15 +1044,20 @@ def find_move_sequencial(game: ChessGame, search_depth: int, alpha_beta_prunning
             best_move = move
             best_eval = eval
 
-    return best_move
+    return best_move, best_eval
 
-# Parallel implementation 1 - Parallel evaluation of moves at search_depth of 0
+# Parallel implementation 1 - Parallel evaluation at search_depth of 0
 # Options: alpha_beta_prunning : Enable/disable alpha beta pruning
 #          move_sorting        : Enable/disable move sorting
 # Description: 1 block use <MAX_THREADS_PER_BLOCK> threads, every 64 threads evaluate a chess board, and reduce locally to find the best moves 
 
 @cuda.jit
-def evaluate_move_parallel_1_kernel(boards, n_boards, scores, perspective):
+def evaluate_move_parallel_1_kernel(
+    boards, 
+    n_boards, 
+    scores, 
+    perspective
+):
     c_piece_base_values         = cuda.const.array_like(piece_base_values)
     c_piece_square_table_king   = cuda.const.array_like(piece_square_table_king)
     c_piece_square_table_pawn   = cuda.const.array_like(piece_square_table_pawn)
@@ -901,7 +1067,7 @@ def evaluate_move_parallel_1_kernel(boards, n_boards, scores, perspective):
     c_piece_square_table_queen  = cuda.const.array_like(piece_square_table_queen)
 
     id = cuda.grid(1)
-    s_evaluation = cuda.shared.array(shape=0, dtype=np.float32)
+    s_evaluation = cuda.shared.array(shape = 0, dtype = np.float32) # Dynamic shared memory, size = n_threads * size(float32)
 
     board_id = id // 64 # Board ID
     piece_id = id % 64  # Piece position on the board
@@ -911,13 +1077,13 @@ def evaluate_move_parallel_1_kernel(boards, n_boards, scores, perspective):
 
         piece = boards[id]
         piece_value = piece_value_device(piece, piece_id, 
-        c_piece_base_values, 
-        c_piece_square_table_king, 
-        c_piece_square_table_pawn, 
-        c_piece_square_table_knight, 
-        c_piece_square_table_bishop, 
-        c_piece_square_table_rook, 
-        c_piece_square_table_queen)
+            c_piece_base_values, 
+            c_piece_square_table_king, 
+            c_piece_square_table_pawn, 
+            c_piece_square_table_knight, 
+            c_piece_square_table_bishop, 
+            c_piece_square_table_rook, 
+            c_piece_square_table_queen)
 
         s_evaluation[cuda.threadIdx.x] = piece_value * perspective
     else:
@@ -933,21 +1099,18 @@ def evaluate_move_parallel_1_kernel(boards, n_boards, scores, perspective):
         stride = stride // 2
         cuda.syncthreads()
 
-    stride = (cuda.blockDim.x // 64) // 2
-    while stride > 0:
-        if piece_id == 0 and \
-        id + stride * 64 < n_boards * 64 and \
-        cuda.threadIdx.x + stride * 64 < cuda.blockDim.x and \
-        s_evaluation[cuda.threadIdx.x] > s_evaluation[cuda.threadIdx.x + stride * 64]:
-            s_evaluation[cuda.threadIdx.x] = s_evaluation[cuda.threadIdx.x + stride * 64]
-        stride = stride // 2
-        cuda.syncthreads()
-
     # Save result
-    if cuda.threadIdx.x == 0:
-        scores[cuda.blockIdx.x] = s_evaluation[0]
+    if piece_id == 0:
+        scores[board_id] = s_evaluation[cuda.threadIdx.x]
 
-def evaluate_move_parallel_1(game: ChessGame, search_depth: int, alpha: float, beta: float, alpha_beta_prunning: bool = False, move_sorting: bool = False) -> float:
+def evaluate_move_parallel_1(
+    game, 
+    search_depth, 
+    alpha, 
+    beta, 
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
     global evaluation_count
     evaluation_count += 1
 
@@ -983,7 +1146,63 @@ def evaluate_move_parallel_1(game: ChessGame, search_depth: int, alpha: float, b
         n_boards = len(moves)
         boards = []
 
+        for move in moves:
+            game_copy = game.copy()
+            game_copy.move(move)
+            boards += game_copy.get_board()
+            del game_copy
+
+        gpu = cuda.get_current_device()
+        block_size = gpu.MAX_THREADS_PER_BLOCK
+        grid_size  = (n_boards * 64 - 1) // block_size + 1
+
+        d_boards = cuda.to_device(np.array(boards, dtype=np.int8))
+        d_scores = cuda.device_array(n_boards, dtype=np.float32)
+        
+        evaluate_move_parallel_1_kernel[grid_size, block_size, 0, block_size * 4](d_boards, n_boards, d_scores, -1.0 if game.side_to_move() else 1.0)
         evaluation_count += n_boards
+
+        scores = d_scores.copy_to_host()
+        for score in scores:
+            if alpha_beta_prunning and -score >= beta:
+                return beta
+
+            if -score > alpha:
+                alpha = -score
+
+        return alpha
+
+def find_move_parallel_1(
+    game, 
+    search_depth, 
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
+    global evaluation_count
+    evaluation_count = 1
+
+    moves = game.generate_all_moves()
+    if moves is None or len(moves) <= 0:
+        return None, 0.0
+
+    if move_sorting:
+        moves = sort_moves(game, moves, best_to_worst=True)
+    
+    best_eval = -1000000.0
+    best_move = None
+
+    if search_depth > 1:
+        for move in moves:
+            game_copy = game.copy()
+            game_copy.move(move)
+            eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
+            del game_copy
+            if eval > best_eval:
+                best_move = move
+                best_eval = eval
+    else:
+        n_boards = len(moves)
+        boards = []
 
         for move in moves:
             game_copy = game.copy()
@@ -995,10 +1214,252 @@ def evaluate_move_parallel_1(game: ChessGame, search_depth: int, alpha: float, b
         block_size = gpu.MAX_THREADS_PER_BLOCK
         grid_size  = (n_boards * 64 - 1) // block_size + 1
 
-        d_boards = cuda.to_device(np.array(boards, dtype=np.int32))
-        d_scores = cuda.device_array(grid_size, dtype=np.float32)
+        d_boards = cuda.to_device(np.array(boards, dtype=np.int8))
+        d_scores = cuda.device_array(n_boards, dtype=np.float32)
+
         evaluate_move_parallel_1_kernel[grid_size, block_size, 0, block_size * 4](d_boards, n_boards, d_scores, -1.0 if game.side_to_move() else 1.0)
+        evaluation_count += n_boards
+
         scores = d_scores.copy_to_host()
+
+        index = 0
+        for score in scores:
+            if -score > best_eval:
+                best_move = moves[index]
+                best_eval = -score
+            index += 1
+
+    return best_move, best_eval
+
+# Parallel implementation 2 - PV-Split
+# Description: 1 block handle 1 subtree
+
+@cuda.jit
+def evaluate_move_parallel_2_kernel(
+    boards,
+    n_boards,
+    side,
+    castling_rights,
+    en_passant_targets,
+    halfmoves,
+    search_depth,
+    scores,
+    evaluation_count,
+    alpha,
+    beta,
+    alpha_beta_prunning,
+    move_sorting
+):
+    c_piece_base_values         = cuda.const.array_like(piece_base_values)
+    c_piece_square_table_king   = cuda.const.array_like(piece_square_table_king)
+    c_piece_square_table_pawn   = cuda.const.array_like(piece_square_table_pawn)
+    c_piece_square_table_knight = cuda.const.array_like(piece_square_table_knight)
+    c_piece_square_table_bishop = cuda.const.array_like(piece_square_table_bishop)
+    c_piece_square_table_rook   = cuda.const.array_like(piece_square_table_rook)
+    c_piece_square_table_queen  = cuda.const.array_like(piece_square_table_queen)
+
+    board_id = cuda.blockIdx.x
+
+    s_shared_i8  = cuda.shared.array(shape = 0, dtype = np.int8)
+    s_shared_i32 = cuda.shared.array(shape = 0, dtype = np.int32)
+    s_shared_f32 = cuda.shared.array(shape = 0, dtype = np.float32)
+
+    s_boards             = s_shared_i8 [                        : 64 * (search_depth + 1)]
+    s_castling_rights    = s_shared_i32[16 * (search_depth + 1) : 17 * (search_depth + 1)]
+    s_en_passant_targets = s_shared_i32[17 * (search_depth + 1) : 18 * (search_depth + 1)]
+    s_halfmoves          = s_shared_i32[18 * (search_depth + 1) : 19 * (search_depth + 1)]
+    s_status             = s_shared_i32[19 * (search_depth + 1) : 20 * (search_depth + 1)]
+    s_alphas             = s_shared_f32[20 * (search_depth + 1) : 21 * (search_depth + 1)]
+    s_betas              = s_shared_f32[21 * (search_depth + 1) : 22 * (search_depth + 1)]
+
+    if cuda.threadIdx.x < 64:
+        s_boards[cuda.threadIdx.x] = boards[board_id * 64 + cuda.threadIdx.x]
+        if cuda.threadIdx.x == 0:
+            s_castling_rights[0]    = castling_rights[board_id]
+            s_en_passant_targets[0] = en_passant_targets[board_id]
+            s_halfmoves[0]          = halfmoves[board_id]
+            s_alphas[0]             = alpha
+            s_betas[0]              = beta
+
+            for i in range(search_depth + 1):
+                s_status[i] = 1
+            s_status[0] = 0
+    cuda.syncthreads()
+
+    out_moves = cuda.local.array(256, dtype = np.int32)
+
+    if cuda.threadIdx.x <= search_depth:
+        _side = side
+        if cuda.threadIdx.x % 2 != 0:
+            _side = not side
+
+        while True:
+            while cuda.atomic.add(s_status, cuda.threadIdx.x, 0) == 1:
+                continue
+
+            if cuda.atomic.add(s_status, cuda.threadIdx.x, 0) > 1:
+                break
+            
+            cuda.atomic.add(evaluation_count, 0, 1)
+            if cuda.threadIdx.x == search_depth:
+                evaluation = 0.0
+                for i in range(64):
+                    evaluation += piece_value_device(s_boards[cuda.threadIdx.x * 64 + i], i, 
+                        c_piece_base_values,
+                        c_piece_square_table_king,
+                        c_piece_square_table_pawn,
+                        c_piece_square_table_knight,
+                        c_piece_square_table_bishop,
+                        c_piece_square_table_rook,
+                        c_piece_square_table_queen)
+                    
+                s_alphas[cuda.threadIdx.x] = evaluation * (1.0 if _side else -1.0)
+            else:
+                if s_halfmoves[cuda.threadIdx.x] >= 100:
+                    s_alphas[cuda.threadIdx.x] = 0.0
+                else:
+                    castling_right = s_castling_rights[cuda.threadIdx.x]
+                    castle_WK = (castling_right & 0x01 != 0)
+                    castle_WQ = (castling_right & 0x02 != 0)
+                    castle_BK = (castling_right & 0x04 != 0)
+                    castle_BQ = (castling_right & 0x08 != 0)
+
+                    s_alphas[cuda.threadIdx.x] = -1000000.0
+
+                    n_moves, attacked_positions = generate_all_moves_device(s_boards[cuda.threadIdx.x * 64 : cuda.threadIdx.x * 64 + 64], _side, 
+                        castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], 
+                        s_halfmoves[cuda.threadIdx.x], out_moves)
+
+                    if n_moves <= 0:
+                        king_position = get_king_position_device(s_boards[cuda.threadIdx.x * 64 : cuda.threadIdx.x * 64 + 64], _side)
+                        if (attacked_positions & (1 << king_position)) == 0:
+                            s_alphas[cuda.threadIdx.x] = 0.0
+                    else:
+                        for move_index in range(n_moves):
+                            for i in range(64):
+                                s_boards[cuda.threadIdx.x * 64 + 64 + i] = s_boards[cuda.threadIdx.x * 64 + i]
+
+                            _, _castle_WK, _castle_WQ, _castle_BK, _castle_BQ, _en_passant_target, _halfmove = move_device(
+                                s_boards[cuda.threadIdx.x * 64 + 64 : cuda.threadIdx.x * 64 + 128], _side, out_moves[move_index], 
+                                castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x])
+                            _castling_right = 0x00
+                            if _castle_WK:
+                                _castling_right |= (1 << 0)
+                            if _castle_WQ:
+                                _castling_right |= (1 << 1)
+                            if _castle_BK:
+                                _castling_right |= (1 << 2)
+                            if _castle_BQ:
+                                _castling_right |= (1 << 3)
+                            s_castling_rights[cuda.threadIdx.x + 1]    = _castling_right
+                            s_en_passant_targets[cuda.threadIdx.x + 1] = _en_passant_target
+                            s_halfmoves[cuda.threadIdx.x + 1]          = _halfmove
+                            s_alphas[cuda.threadIdx.x + 1]             = -s_betas[cuda.threadIdx.x]
+                            s_betas[cuda.threadIdx.x + 1]              = -s_alphas[cuda.threadIdx.x]
+
+                            cuda.atomic.exch(s_status, cuda.threadIdx.x + 1, 0)
+                            while cuda.atomic.add(s_status, cuda.threadIdx.x + 1, 0) == 0:
+                                continue
+
+                            if alpha_beta_prunning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
+                                s_alphas[cuda.threadIdx.x] = s_betas[cuda.threadIdx.x]
+                                break
+                            
+                            if -s_alphas[cuda.threadIdx.x + 1] > s_alphas[cuda.threadIdx.x]:
+                                s_alphas[cuda.threadIdx.x] = -s_alphas[cuda.threadIdx.x + 1]
+
+            if cuda.threadIdx.x == 0:
+                for i in range(search_depth + 1):
+                    cuda.atomic.exch(s_status, i, 2)
+            else:
+                cuda.atomic.exch(s_status, cuda.threadIdx.x, 1)
+    cuda.syncthreads()    
+
+    if cuda.threadIdx.x == 0:
+        scores[board_id] = s_alphas[0]
+
+def evaluate_move_parallel_2(
+    game, 
+    search_depth,
+    alpha, 
+    beta, 
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
+    global evaluation_count
+    evaluation_count += 1
+
+    if game.get_halfmove() >= 100:
+        return 0.0
+
+    if search_depth == 0:
+        return game.evaluate()
+
+    moves = game.generate_all_moves()
+    if moves is None or len(moves) <= 0:
+        if game.is_current_side_in_check():
+            return -1000000.0
+        return 0.0
+
+    if move_sorting:
+        moves = sort_moves(game, moves, best_to_worst=True)
+
+    first_move = moves[0]
+    moves.pop(0)
+
+    game_copy = game.copy()
+    game_copy.move(first_move)
+    eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_prunning, move_sorting)
+    del game_copy
+
+    if alpha_beta_prunning and eval >= beta:
+        return beta
+
+    if eval > alpha:
+        alpha = eval
+
+    if len(moves) > 0:
+        n_boards = len(moves)
+        boards             = []
+        castling_rights    = []
+        en_passant_targets = []
+        halfmoves          = []
+
+        for move in moves:
+            game_copy = game.copy()
+            game_copy.move(move)
+
+            boards += game_copy.get_board()
+            castling_right = 0x00
+            if game_copy.m_castle_WK:
+                castling_right |= (1 << 0)
+            if game_copy.m_castle_WQ:
+                castling_right |= (1 << 1)
+            if game_copy.m_castle_BK:
+                castling_right |= (1 << 2)
+            if game_copy.m_castle_BQ:
+                castling_right |= (1 << 3)
+            castling_rights.append(castling_right)
+            en_passant_targets.append(-1 if game_copy.m_en_passant_target is None else game_copy.m_en_passant_target)
+            halfmoves.append(game_copy.get_halfmove())
+            del game_copy   
+
+        block_size = 64
+        grid_size  = n_boards
+
+        d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8))
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int32))
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int32))
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int32))
+
+        d_scores           = cuda.device_array(n_boards, dtype = np.float32)
+        d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
+
+        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 88](d_boards, n_boards, not game.side_to_move(), 
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -beta, -alpha, alpha_beta_prunning, move_sorting)
+
+        scores = d_scores.copy_to_host()
+        evaluation_count += d_evaluation_count.copy_to_host()[0]
 
         for score in scores:
             if alpha_beta_prunning and -score >= beta:
@@ -1007,88 +1468,84 @@ def evaluate_move_parallel_1(game: ChessGame, search_depth: int, alpha: float, b
             if -score > alpha:
                 alpha = -score
 
-        return alpha
+    return alpha
 
-def find_move_parallel_1(game: ChessGame, search_depth: int, alpha_beta_prunning: bool = False, move_sorting: bool = False):
+def find_move_parallel_2(
+    game, 
+    search_depth,
+    alpha_beta_prunning = False, 
+    move_sorting        = False
+):
     global evaluation_count
     evaluation_count = 1
 
     moves = game.generate_all_moves()
     if moves is None or len(moves) <= 0:
-        return None
+        return None, 0.0
 
     if move_sorting:
         moves = sort_moves(game, moves, best_to_worst=True)
 
-    best_eval = -1000000.0
-    best_move = None
-
-    for move in moves:
-        game_copy = game.copy()
-        game_copy.move(move)
-        eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
-        del game_copy
-        if eval > best_eval:
-            best_move = move
-            best_eval = eval
-
-    return best_move
-
-# Parallel implementation 2
-
-def evaluate_move_parallel_2(game: ChessGame, search_depth: int):
-    global evaluation_count
-    evaluation_count += 1
-
-    if game.get_halfmove() >= 100:
-        return 0.0
-
-    moves = game.generate_all_moves()
-    if moves is None or len(moves) <= 0:
-        if game.is_current_side_in_check():
-            return -1000000.0
-        return 0.0
-
     first_move = moves[0]
-    moves.remove(first_move)
-
-    #if move_sorting:
-    #    moves = sort_moves(game, moves, best_to_worst=True)
+    moves.pop(0)
 
     game_copy = game.copy()
     game_copy.move(first_move)
-    best_eval = -evaluate_move_parallel_2(game_copy, search_depth - 1)
-    del game_copy
-
-    if len(moves) > 0:
-        pass
-
-    return best_eval
-
-def find_move_parallel_2(game: ChessGame, search_depth: int):
-    global evaluation_count
-    evaluation_count = 1
-
-    moves = game.generate_all_moves()
-    if moves is None or len(moves) <= 0:
-        return None
-
-    #if move_sorting:
-    #    moves = sort_moves(game, moves, best_to_worst=True)
-
-    first_move = moves[0]
-    moves.remove(first_move)
-
-    game_copy = game.copy()
-    game_copy.move(first_move)
-    best_eval = -evaluate_move_parallel_2(game_copy, search_depth - 1)
+    best_eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -1000000.0, 1000000.0, alpha_beta_prunning, move_sorting)
     best_move = first_move
     del game_copy
 
     if len(moves) > 0:
-        pass
+        n_boards = len(moves)
+        boards             = []
+        castling_rights    = []
+        en_passant_targets = []
+        halfmoves          = []
 
-    return best_move
+        for move in moves:
+            game_copy = game.copy()
+            game_copy.move(move)
+
+            boards += game_copy.get_board()
+            castling_right = 0x00
+            if game_copy.m_castle_WK:
+                castling_right |= (1 << 0)
+            if game_copy.m_castle_WQ:
+                castling_right |= (1 << 1)
+            if game_copy.m_castle_BK:
+                castling_right |= (1 << 2)
+            if game_copy.m_castle_BQ:
+                castling_right |= (1 << 3)
+            castling_rights.append(castling_right)
+            en_passant_targets.append(-1 if game_copy.m_en_passant_target is None else game_copy.m_en_passant_target)
+            halfmoves.append(game_copy.get_halfmove())
+            del game_copy   
+
+        block_size = 64
+        grid_size  = n_boards
+
+        d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8))
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int32))
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int32))
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int32))
+
+        d_scores           = cuda.device_array(n_boards, dtype = np.float32)
+        d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
+
+        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 88](d_boards, n_boards, not game.side_to_move(), 
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
+
+        scores = d_scores.copy_to_host()
+        evaluation_count += d_evaluation_count.copy_to_host()[0]
+
+        index = 0
+        for score in scores:
+            if -score > best_eval:
+                best_eval = -score
+                best_move = moves[index]
+            index += 1
+
+    return best_move, best_eval
 
 # Versions:
 #
@@ -1096,23 +1553,37 @@ def find_move_parallel_2(game: ChessGame, search_depth: int):
 # - 1: Sequential minimax with alpha - beta pruning
 # - 2: Sequential minimax with alpha - beta pruning and move sorting
 #
-# - 3: Parallel on search_depth = 0
-# - 4: Parallel on search_depth = 0 with alpha - beta pruning
-# - 5: Parallel on search_depth = 0 with alpha - beta pruning and move sorting
+# - 3: Parallel v1: parallel evaluation at search_depth = 0
+# - 4: Parallel v1: parallel evaluation at search_depth = 0 with alpha - beta pruning
+# - 5: Parallel v1: parallel evaluation at search_depth = 0 with alpha - beta pruning and move sorting
 #
+# - 6: Parallel v2: parallel PV-split
+# - 7: Parallel v2: parallel PV-split with alpha - beta pruning
+# - 8: Parallel v2: parallel PV-split with alpha - beta pruning and move sorting
 #
 
-def find_move(game: ChessGame, search_depth: int, version: int = 0):
+def find_move(game, search_depth, version):
     match version:
         case 0:
             return find_move_sequencial(game, search_depth)
         case 1:
-            return find_move_sequencial(game, search_depth, alpha_beta_prunning=True)
+            return find_move_sequencial(game, search_depth, alpha_beta_prunning = True)
         case 2:
-            return find_move_sequencial(game, search_depth, alpha_beta_prunning=True, move_sorting=True)
+            return find_move_sequencial(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
         case 3: 
             return find_move_parallel_1(game, search_depth)
         case 4: 
-            return find_move_parallel_1(game, search_depth, alpha_beta_prunning=True)
+            return find_move_parallel_1(game, search_depth, alpha_beta_prunning = True)
         case 5: 
-            return find_move_parallel_1(game, search_depth, alpha_beta_prunning=True, move_sorting=True)
+            return find_move_parallel_1(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+        case 6:
+            return find_move_parallel_2(game, search_depth)
+        case 7:
+            return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True)
+
+
+def init_kernels():
+    evaluate_move_parallel_1_kernel[1, 64, 0, 256](np.zeros(64, dtype = np.int8), 1, np.empty(1), 1.0)
+    evaluate_move_parallel_2_kernel[1, 64, 0, 88](np.zeros(64, dtype = np.int8), 1, True, np.zeros(1, dtype = np.int32), np.array([-1], dtype = np.int32), np.zeros(1, dtype = np.int32), 0, np.empty(1, dtype = np.float32), np.empty(1, dtype = np.int32), -1000000.0, 1000000.0, False, False)
+
+init_kernels()
