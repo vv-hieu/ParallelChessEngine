@@ -877,6 +877,49 @@ def generate_all_moves_device(
         count = generate_moves_device(board, side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, king_position, i, required_destinations, pinned_pieces, attacked_positions, count, out_moves)
     return count, attacked_positions
 
+@cuda.jit(device = True)
+def generate_all_moves_sorted_device(
+    board, 
+    side, 
+    castle_WK, 
+    castle_WQ, 
+    castle_BK, 
+    castle_BQ, 
+    en_passant_target, 
+    halfmoves, 
+    out_moves,
+    move_scores,
+    piece_base_values
+):
+    n_moves, attacked_positions = generate_all_moves_device(board, side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, halfmoves, out_moves)
+    
+    for i in range(n_moves):
+        start_position, end_position, promote_to, en_passant = decode_move_device(side, out_moves[i])
+        piece1 = board[start_position]
+        piece2 = board[end_position]
+
+        score = 0.0
+        if (piece2 & 0x07) != 0x00:
+            score = 10.0 * piece_base_values[piece2 & 0x07] - piece_base_values[piece1 & 0x07]
+
+        move_scores[i] = score
+
+    for i in range(n_moves):
+        max_idx = i
+        for j in range(i + 1, n_moves):
+            if move_scores[j] > move_scores[max_idx]:
+                max_idx = j
+        if max_idx != i:
+            temp = move_scores[i]
+            move_scores[i] = move_scores[max_idx]
+            move_scores[max_idx] = temp
+
+            temp = out_moves[i]
+            out_moves[i] = out_moves[max_idx]
+            out_moves[max_idx] = temp
+
+    return n_moves, attacked_positions
+
 # Make a move on the GPU
 
 @cuda.jit(device = True)
@@ -1286,7 +1329,8 @@ def evaluate_move_parallel_2_kernel(
             s_status[0] = 0
     cuda.syncthreads()
 
-    out_moves = cuda.local.array(256, dtype = np.int32)
+    out_moves   = cuda.local.array(256, dtype = np.int32)
+    move_scores = cuda.local.array(256, dtype = np.float32)
 
     if cuda.threadIdx.x <= search_depth:
         _side = side
@@ -1326,12 +1370,13 @@ def evaluate_move_parallel_2_kernel(
 
                     s_alphas[cuda.threadIdx.x] = -1000000.0
 
-                    n_moves, attacked_positions = generate_all_moves_device(s_boards[cuda.threadIdx.x * 64 : cuda.threadIdx.x * 64 + 64], _side, 
-                        castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], 
-                        s_halfmoves[cuda.threadIdx.x], out_moves)
+                    if move_sorting:
+                        n_moves, attacked_positions = generate_all_moves_sorted_device(s_boards[cuda.threadIdx.x * 64:], _side, castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x], out_moves, move_scores, c_piece_base_values)
+                    else:
+                        n_moves, attacked_positions = generate_all_moves_device(s_boards[cuda.threadIdx.x * 64:], _side, castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x], out_moves)
 
                     if n_moves <= 0:
-                        king_position = get_king_position_device(s_boards[cuda.threadIdx.x * 64 : cuda.threadIdx.x * 64 + 64], _side)
+                        king_position = get_king_position_device(s_boards[cuda.threadIdx.x * 64:], _side)
                         if (attacked_positions & (1 << king_position)) == 0:
                             s_alphas[cuda.threadIdx.x] = 0.0
                     else:
@@ -1580,6 +1625,8 @@ def find_move(game, search_depth, version):
             return find_move_parallel_2(game, search_depth)
         case 7:
             return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True)
+        case 8:
+            return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
 
 
 def init_kernels():
