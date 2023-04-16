@@ -28,7 +28,39 @@ def sort_moves(
     res.sort(key = lambda move: move_score(game, move), reverse = best_to_worst)
     return res
 
-# Device-side move encoding and decoding
+# Move encoding and decoding
+
+def encode_move(
+    move
+):
+    promote_to = 0x00
+    if move.promote_to() is not None:
+        promote_to = (move.promote_to() & 0x07) - 2
+
+    res = 0x00
+
+    res |= (move.start_position() & 0xFF) << 0 
+    res |= (move.end_position() & 0xFF) << 8
+    res |= promote_to << 16
+    res |= (1 if move.en_passant_target() is not None else 0) << 19
+
+    return res
+
+def decode_move(
+    move,
+    side
+):
+    start_position = (move >>  0) & 0xFF
+    end_position   = (move >>  8) & 0xFF
+    promote_to     = (move >> 16) & 0x07
+    en_passant     = (move >> 19) & 0x01 != 0
+
+    if promote_to != 0x00:
+        promote_to = (promote_to + 2) | (0x08 if side else 0x00)
+
+    en_passant_target = end_position if en_passant else None
+
+    return Move(start_position, end_position, en_passant_target, promote_to)
 
 @cuda.jit(device = True, inline = True)
 def encode_move_device(
@@ -64,7 +96,7 @@ def decode_move_device(
         
     return start_position, end_position, promote_to, en_passant
 
-# Device-side piece value function
+# Piece value function
 
 piece_base_values         = np.array(ChessPieces.PIECE_TYPE_VALUES        , dtype=float)
 piece_square_table_king   = np.array(ChessPieces.PIECE_SQUARE_TABLE_KING  , dtype=float)
@@ -113,7 +145,7 @@ def piece_value_device(
 
     return (base_value + positional_value) * (-1.0 if piece_side == 0 else 1.0)
 
-# Device-side move generation function
+# Move generation function
 
 @cuda.jit(device = True, inline = True)
 def is_in_bound_device(
@@ -1308,12 +1340,12 @@ def evaluate_move_parallel_2_kernel(
     s_shared_f32 = cuda.shared.array(shape = 0, dtype = np.float32)
 
     s_boards             = s_shared_i8 [                        : 64 * (search_depth + 1)]
-    s_castling_rights    = s_shared_i32[16 * (search_depth + 1) : 17 * (search_depth + 1)]
-    s_en_passant_targets = s_shared_i32[17 * (search_depth + 1) : 18 * (search_depth + 1)]
-    s_halfmoves          = s_shared_i32[18 * (search_depth + 1) : 19 * (search_depth + 1)]
-    s_status             = s_shared_i32[19 * (search_depth + 1) : 20 * (search_depth + 1)]
-    s_alphas             = s_shared_f32[20 * (search_depth + 1) : 21 * (search_depth + 1)]
-    s_betas              = s_shared_f32[21 * (search_depth + 1) : 22 * (search_depth + 1)]
+    s_castling_rights    = s_shared_i8 [64 * (search_depth + 1) : 65 * (search_depth + 1)]
+    s_en_passant_targets = s_shared_i8 [65 * (search_depth + 1) : 66 * (search_depth + 1)]
+    s_halfmoves          = s_shared_i8 [66 * (search_depth + 1) : 67 * (search_depth + 1)]
+    s_status             = s_shared_i32[17 * (search_depth + 1) : 18 * (search_depth + 1)]
+    s_alphas             = s_shared_f32[18 * (search_depth + 1) : 19 * (search_depth + 1)]
+    s_betas              = s_shared_f32[19 * (search_depth + 1) : 20 * (search_depth + 1)]
 
     if cuda.threadIdx.x < 64:
         s_boards[cuda.threadIdx.x] = boards[board_id * 64 + cuda.threadIdx.x]
@@ -1367,8 +1399,6 @@ def evaluate_move_parallel_2_kernel(
                     castle_WQ = (castling_right & 0x02 != 0)
                     castle_BK = (castling_right & 0x04 != 0)
                     castle_BQ = (castling_right & 0x08 != 0)
-
-                    s_alphas[cuda.threadIdx.x] = -1000000.0
 
                     if move_sorting:
                         n_moves, attacked_positions = generate_all_moves_sorted_device(s_boards[cuda.threadIdx.x * 64:], _side, castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x], out_moves, move_scores, c_piece_base_values)
@@ -1490,17 +1520,19 @@ def evaluate_move_parallel_2(
             del game_copy   
 
         block_size = 64
+        while block_size < search_depth:
+            block_size *= 2
         grid_size  = n_boards
 
         d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8))
-        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int32))
-        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int32))
-        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int32))
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int8))
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int8))
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int8))
 
         d_scores           = cuda.device_array(n_boards, dtype = np.float32)
         d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
 
-        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 88](d_boards, n_boards, not game.side_to_move(), 
+        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, n_boards, not game.side_to_move(), 
             d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -beta, -alpha, alpha_beta_prunning, move_sorting)
 
         scores = d_scores.copy_to_host()
@@ -1570,14 +1602,14 @@ def find_move_parallel_2(
         grid_size  = n_boards
 
         d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8))
-        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int32))
-        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int32))
-        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int32))
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int8))
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int8))
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int8))
 
         d_scores           = cuda.device_array(n_boards, dtype = np.float32)
         d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
 
-        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 88](d_boards, n_boards, not game.side_to_move(), 
+        evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, n_boards, not game.side_to_move(), 
             d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
 
         scores = d_scores.copy_to_host()
@@ -1627,10 +1659,3 @@ def find_move(game, search_depth, version):
             return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True)
         case 8:
             return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
-
-
-def init_kernels():
-    evaluate_move_parallel_1_kernel[1, 64, 0, 256](np.zeros(64, dtype = np.int8), 1, np.empty(1), 1.0)
-    evaluate_move_parallel_2_kernel[1, 64, 0, 88](np.zeros(64, dtype = np.int8), 1, True, np.zeros(1, dtype = np.int32), np.array([-1], dtype = np.int32), np.zeros(1, dtype = np.int32), 0, np.empty(1, dtype = np.float32), np.empty(1, dtype = np.int32), -1000000.0, 1000000.0, False, False)
-
-init_kernels()

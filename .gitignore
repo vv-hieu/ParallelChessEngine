@@ -127,3 +127,14 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Notebook-written files
+sequencial_minimax_basic.py
+sequencial_minimax_alphabeta.py
+sequencial_minimax_alphabeta_movesorting.py
+parallelv1_minimax_basic.py
+parallelv1_minimax_alphabeta.py
+parallelv1_minimax_alphabeta_movesorting.py
+parallelv2_minimax_basic.py
+parallelv2_minimax_alphabeta.py
+parallelv2_minimax_alphabeta_movesorting.py
