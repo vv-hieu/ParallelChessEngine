@@ -1,13 +1,14 @@
 # **PARALLEL CHESS ENGINE**
 
-## **THÔNG TIN NHÓM**
+## **THÔNG TIN**
+
+**GVHD:** Phạm Trọng Nghĩa
 
 | Họ và tên sinh viên |   MSSV   |
 |---------------------|----------|
 | Võ Văn Hiếu         | 19120511 |
 | Huỳnh Đức Huy       | 19120526 |
 | Vương Thế Khang     | 19120539 |
-
 ## **GIỚI THIỆU**
 
 Đồ án này tập trung vào thuật toán tìm kiếm minimax, cắt tỉa alpha-beta và ứng dụng trong cờ vua.
