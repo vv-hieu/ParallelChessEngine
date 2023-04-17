@@ -926,7 +926,7 @@ def generate_all_moves_sorted_device(
     n_moves, attacked_positions = generate_all_moves_device(board, side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, halfmoves, out_moves)
     
     for i in range(n_moves):
-        start_position, end_position, promote_to, en_passant = decode_move_device(side, out_moves[i])
+        start_position, end_position, promote_to, en_passant = decode_move_device(out_moves[i], side)
         piece1 = board[start_position]
         piece2 = board[end_position]
 
