@@ -1659,3 +1659,10 @@ def find_move(game, search_depth, version):
             return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True)
         case 8:
             return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+
+def compile_kernels():
+    game = ChessGame('k7/8/8/8/8/8/8/K7 w - - 0 1')
+    find_move(game, 1, 3)
+    find_move(game, 2, 6)
+
+compile_kernels()
