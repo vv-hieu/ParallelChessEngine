@@ -96,6 +96,19 @@ def decode_move_device(
         
     return start_position, end_position, promote_to, en_passant
 
+# Mutex locking/unlocking
+
+@cuda.jit(device = True)
+def lock(mutex):
+    while cuda.atomic.compare_and_swap(mutex, 0, 1) != 0:
+        pass
+    cuda.threadfence()
+
+@cuda.jit(device = True)
+def unlock(mutex):
+    cuda.threadfence()
+    cuda.atomic.exch(mutex, 0, 0)
+
 # Piece value function
 
 piece_base_values         = np.array(ChessPieces.PIECE_TYPE_VALUES        , dtype=float)
@@ -1048,8 +1061,6 @@ def move_device(
     return side, castle_WK, castle_WQ, castle_BK, castle_BQ, en_passant_target, halfmove
 
 # Sequential implementation
-# Options: alpha_beta_prunning : Enable/disable alpha beta pruning
-#          move_sorting        : Enable/disable move sorting
 
 def evaluate_move_sequential(
     game, 
@@ -1121,10 +1132,7 @@ def find_move_sequencial(
 
     return best_move, best_eval
 
-# Parallel implementation 1 - Parallel evaluation at search_depth of 0
-# Options: alpha_beta_prunning : Enable/disable alpha beta pruning
-#          move_sorting        : Enable/disable move sorting
-# Description: 1 block use <MAX_THREADS_PER_BLOCK> threads, every 64 threads evaluate a chess board, and reduce locally to find the best moves 
+# Parallel implementation 1
 
 @cuda.jit
 def evaluate_move_parallel_1_kernel(
@@ -1306,8 +1314,7 @@ def find_move_parallel_1(
 
     return best_move, best_eval
 
-# Parallel implementation 2 - PV-Split
-# Description: 1 block handle 1 subtree
+# Parallel implementation 2
 
 @cuda.jit
 def evaluate_move_parallel_2_kernel(
@@ -1624,19 +1631,22 @@ def find_move_parallel_2(
 
     return best_move, best_eval
 
+# Parallel implementation 3
+
+
 # Versions:
 #
-# - 0: Sequential minimax
-# - 1: Sequential minimax with alpha - beta pruning
-# - 2: Sequential minimax with alpha - beta pruning and move sorting
+# -  0: Sequential minimax
+# -  1: Sequential minimax with alpha - beta pruning
+# -  2: Sequential minimax with alpha - beta pruning and move sorting
 #
-# - 3: Parallel v1: parallel evaluation at search_depth = 0
-# - 4: Parallel v1: parallel evaluation at search_depth = 0 with alpha - beta pruning
-# - 5: Parallel v1: parallel evaluation at search_depth = 0 with alpha - beta pruning and move sorting
+# -  3: Parallel v1: parallel v1
+# -  4: Parallel v1: parallel v1 with alpha - beta pruning
+# -  5: Parallel v1: parallel v1 with alpha - beta pruning and move sorting
 #
-# - 6: Parallel v2: parallel PV-split
-# - 7: Parallel v2: parallel PV-split with alpha - beta pruning
-# - 8: Parallel v2: parallel PV-split with alpha - beta pruning and move sorting
+# -  6: Parallel v2: parallel v2
+# -  7: Parallel v2: parallel v2 with alpha - beta pruning
+# -  8: Parallel v2: parallel v2 with alpha - beta pruning and move sorting
 #
 
 def find_move(game, search_depth, version):
@@ -1664,5 +1674,6 @@ def compile_kernels():
     game = ChessGame('k7/8/8/8/8/8/8/K7 w - - 0 1')
     find_move(game, 1, 3)
     find_move(game, 2, 6)
+    find_move(game, 2, 9)
 
 compile_kernels()
