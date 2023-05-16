@@ -24,7 +24,7 @@ PROPERTY_COLOR_RECENT_DARK       = (0.25 * 255, 0.45 * 255, 0.60 * 255)
 PROPERTY_COLOR_RECENT_LIGHT      = (0.40 * 255, 0.65 * 255, 0.85 * 255)
 
 PROPERTY_CHESSENGINE_VERSION      = 11
-PROPERTY_CHESSENGINE_SEARCH_DEPTH = 7
+PROPERTY_CHESSENGINE_SEARCH_DEPTH = 6
 
 PIECE_ICON_KING_WHITE   = pygame.transform.smoothscale(pygame.image.load('icons/white_king.png'), (PROPERTY_TILE_SIZE, PROPERTY_TILE_SIZE))
 PIECE_ICON_KING_BLACK   = pygame.transform.smoothscale(pygame.image.load('icons/black_king.png'), (PROPERTY_TILE_SIZE, PROPERTY_TILE_SIZE))

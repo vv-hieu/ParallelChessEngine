@@ -1074,7 +1074,7 @@ def evaluate_move_sequential(
     search_depth, 
     alpha, 
     beta, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1098,10 +1098,10 @@ def evaluate_move_sequential(
     for move in moves:
         game_copy = game.copy()
         game_copy.move(move)
-        eval = -evaluate_move_sequential(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_prunning, move_sorting)
+        eval = -evaluate_move_sequential(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_pruning, move_sorting)
         del game_copy
 
-        if alpha_beta_prunning and eval >= beta:
+        if alpha_beta_pruning and eval >= beta:
             return beta
 
         if eval > alpha:
@@ -1112,7 +1112,7 @@ def evaluate_move_sequential(
 def find_move_sequencial(
     game, 
     search_depth, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1131,7 +1131,7 @@ def find_move_sequencial(
     for move in moves:
         game_copy = game.copy()
         game_copy.move(move)
-        eval = -evaluate_move_sequential(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
+        eval = -evaluate_move_sequential(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_pruning, move_sorting)
         del game_copy
         if eval > best_eval:
             best_move = move
@@ -1198,7 +1198,7 @@ def evaluate_move_parallel_1(
     search_depth, 
     alpha, 
     beta, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1223,10 +1223,10 @@ def evaluate_move_parallel_1(
         for move in moves:
             game_copy = game.copy()
             game_copy.move(move)
-            eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_prunning, move_sorting)
+            eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_pruning, move_sorting)
             del game_copy
 
-            if alpha_beta_prunning and eval >= beta:
+            if alpha_beta_pruning and eval >= beta:
                 return beta
 
             if eval > alpha:
@@ -1253,7 +1253,7 @@ def evaluate_move_parallel_1(
 
         scores = d_scores.copy_to_host()
         for score in scores:
-            if alpha_beta_prunning and -score >= beta:
+            if alpha_beta_pruning and -score >= beta:
                 return beta
 
             if -score > alpha:
@@ -1264,7 +1264,7 @@ def evaluate_move_parallel_1(
 def find_move_parallel_1(
     game, 
     search_depth, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1284,7 +1284,7 @@ def find_move_parallel_1(
         for move in moves:
             game_copy = game.copy()
             game_copy.move(move)
-            eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
+            eval = -evaluate_move_parallel_1(game_copy, search_depth - 1, -1000000.0, -best_eval, alpha_beta_pruning, move_sorting)
             del game_copy
             if eval > best_eval:
                 best_move = move
@@ -1333,7 +1333,7 @@ def evaluate_move_parallel_2_kernel(
     evaluation_count,
     alpha,
     beta,
-    alpha_beta_prunning,
+    alpha_beta_pruning,
     move_sorting
 ):
     c_piece_base_values         = cuda.const.array_like(piece_base_values)
@@ -1372,13 +1372,13 @@ def evaluate_move_parallel_2_kernel(
             s_status[0] = 0
     cuda.syncthreads()
 
-    out_moves   = cuda.local.array(256, dtype = np.int32)
-    move_scores = cuda.local.array(256, dtype = np.float32)
-
     if cuda.threadIdx.x <= search_depth:
         _side = side
         if cuda.threadIdx.x % 2 != 0:
             _side = not side
+
+        out_moves   = cuda.local.array(256, dtype = np.int32)
+        move_scores = cuda.local.array(256, dtype = np.float32)
 
         while True:
             while cuda.atomic.add(s_status, cuda.threadIdx.x, 0) == 1:
@@ -1447,7 +1447,7 @@ def evaluate_move_parallel_2_kernel(
                             while cuda.atomic.add(s_status, cuda.threadIdx.x + 1, 0) == 0:
                                 continue
 
-                            if alpha_beta_prunning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
+                            if alpha_beta_pruning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
                                 s_alphas[cuda.threadIdx.x] = s_betas[cuda.threadIdx.x]
                                 break
                             
@@ -1469,7 +1469,7 @@ def evaluate_move_parallel_2(
     search_depth,
     alpha, 
     beta, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1495,10 +1495,10 @@ def evaluate_move_parallel_2(
 
     game_copy = game.copy()
     game_copy.move(first_move)
-    eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_prunning, move_sorting)
+    eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_pruning, move_sorting)
     del game_copy
 
-    if alpha_beta_prunning and eval >= beta:
+    if alpha_beta_pruning and eval >= beta:
         return beta
 
     if eval > alpha:
@@ -1544,13 +1544,13 @@ def evaluate_move_parallel_2(
         d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
 
         evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, not game.side_to_move(), 
-            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -beta, -alpha, alpha_beta_prunning, move_sorting)
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -beta, -alpha, alpha_beta_pruning, move_sorting)
 
         scores = d_scores.copy_to_host()
         evaluation_count += d_evaluation_count.copy_to_host()[0]
 
         for score in scores:
-            if alpha_beta_prunning and -score >= beta:
+            if alpha_beta_pruning and -score >= beta:
                 return beta
 
             if -score > alpha:
@@ -1561,7 +1561,7 @@ def evaluate_move_parallel_2(
 def find_move_parallel_2(
     game, 
     search_depth,
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1579,7 +1579,7 @@ def find_move_parallel_2(
 
     game_copy = game.copy()
     game_copy.move(first_move)
-    best_eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -1000000.0, 1000000.0, alpha_beta_prunning, move_sorting)
+    best_eval = -evaluate_move_parallel_2(game_copy, search_depth - 1, -1000000.0, 1000000.0, alpha_beta_pruning, move_sorting)
     best_move = first_move
     del game_copy
 
@@ -1623,7 +1623,7 @@ def find_move_parallel_2(
         d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
 
         evaluate_move_parallel_2_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, not game.side_to_move(), 
-            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -1000000.0, -best_eval, alpha_beta_prunning, move_sorting)
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_scores, d_evaluation_count, -1000000.0, -best_eval, alpha_beta_pruning, move_sorting)
 
         scores = d_scores.copy_to_host()
         evaluation_count += d_evaluation_count.copy_to_host()[0]
@@ -1651,7 +1651,7 @@ def evaluate_move_parallel_3_kernel(
     alpha_beta,
     out_move_index,
     mutex,
-    alpha_beta_prunning,
+    alpha_beta_pruning,
     move_sorting
 ):
     c_piece_base_values         = cuda.const.array_like(piece_base_values)
@@ -1702,16 +1702,16 @@ def evaluate_move_parallel_3_kernel(
             s_status[0] = 0
     cuda.syncthreads()
 
-    if alpha_beta_prunning and s_should_break[0] != 0:
+    if alpha_beta_pruning and s_should_break[0] != 0:
         return
-
-    out_moves   = cuda.local.array(256, dtype = np.int32)
-    move_scores = cuda.local.array(256, dtype = np.float32)
 
     if cuda.threadIdx.x <= search_depth:
         _side = side
         if cuda.threadIdx.x % 2 != 0:
             _side = not side
+
+        out_moves   = cuda.local.array(256, dtype = np.int32)
+        move_scores = cuda.local.array(256, dtype = np.float32)
 
         while True:
             while cuda.atomic.add(s_status, cuda.threadIdx.x, 0) == 1:
@@ -1780,7 +1780,7 @@ def evaluate_move_parallel_3_kernel(
                             while cuda.atomic.add(s_status, cuda.threadIdx.x + 1, 0) == 0:
                                 continue
 
-                            if alpha_beta_prunning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
+                            if alpha_beta_pruning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
                                 s_alphas[cuda.threadIdx.x] = s_betas[cuda.threadIdx.x]
                                 break
                             
@@ -1807,7 +1807,7 @@ def evaluate_move_parallel_3(
     search_depth,
     alpha, 
     beta, 
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1833,10 +1833,10 @@ def evaluate_move_parallel_3(
 
     game_copy = game.copy()
     game_copy.move(first_move)
-    eval = -evaluate_move_parallel_3(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_prunning, move_sorting)
+    eval = -evaluate_move_parallel_3(game_copy, search_depth - 1, -beta, -alpha, alpha_beta_pruning, move_sorting)
     del game_copy
 
-    if alpha_beta_prunning and eval >= beta:
+    if alpha_beta_pruning and eval >= beta:
         return beta
 
     if eval > alpha:
@@ -1883,7 +1883,7 @@ def evaluate_move_parallel_3(
         d_evaluation_count   = cuda.to_device(np.zeros(1, dtype = np.int32))
 
         evaluate_move_parallel_3_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, not game.side_to_move(), 
-            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_evaluation_count, d_alpha_beta, d_out_move_index, d_mutex, alpha_beta_prunning, move_sorting)
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_evaluation_count, d_alpha_beta, d_out_move_index, d_mutex, alpha_beta_pruning, move_sorting)
 
         evaluation_count += d_evaluation_count.copy_to_host()[0]
 
@@ -1894,7 +1894,7 @@ def evaluate_move_parallel_3(
 def find_move_parallel_3(
     game, 
     search_depth,
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1912,7 +1912,7 @@ def find_move_parallel_3(
 
     game_copy = game.copy()
     game_copy.move(first_move)
-    best_eval = -evaluate_move_parallel_3(game_copy, search_depth - 1, -1000000.0, 1000000.0, alpha_beta_prunning, move_sorting)
+    best_eval = -evaluate_move_parallel_3(game_copy, search_depth - 1, -1000000.0, 1000000.0, alpha_beta_pruning, move_sorting)
     best_move = first_move
     del game_copy
 
@@ -1957,7 +1957,7 @@ def find_move_parallel_3(
         d_evaluation_count   = cuda.to_device(np.zeros(1, dtype = np.int32))
 
         evaluate_move_parallel_3_kernel[grid_size, block_size, 0, search_depth * 80](d_boards, not game.side_to_move(), 
-            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_evaluation_count, d_alpha_beta, d_out_move_index, d_mutex, alpha_beta_prunning, move_sorting)
+            d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth - 1, d_evaluation_count, d_alpha_beta, d_out_move_index, d_mutex, alpha_beta_pruning, move_sorting)
 
         evaluation_count += d_evaluation_count.copy_to_host()[0]
 
@@ -1973,7 +1973,7 @@ def find_move_parallel_3(
 def evaluate_move_parallel_4(
     games, 
     search_depth,
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -1981,7 +1981,7 @@ def evaluate_move_parallel_4(
     if len(games) <= 0:
         return []
 
-    if len(games) < 1024 and search_depth > 0:
+    if len(games) < 64 and search_depth > 0:
         children_counts = []
         children_games  = []
         scores          = []
@@ -2000,7 +2000,7 @@ def evaluate_move_parallel_4(
                     game_copy.move(move)
                     children_games.append(game_copy)
 
-        children_scores = evaluate_move_parallel_4(children_games, search_depth - 1, alpha_beta_prunning, move_sorting)
+        children_scores = evaluate_move_parallel_4(children_games, search_depth - 1, alpha_beta_pruning, move_sorting)
 
         idx = 0
         for i in range(len(games)):
@@ -2017,50 +2017,79 @@ def evaluate_move_parallel_4(
 
         return scores
 
-    boards             = []
-    castling_rights    = []
-    en_passant_targets = []
-    halfmoves          = []
-
     side = games[0].side_to_move()
-
-    for game in games:
-        boards += game.get_board()
-        castling_right = 0x00
-        if game.m_castle_WK:
-            castling_right |= (1 << 0)
-        if game.m_castle_WQ:
-            castling_right |= (1 << 1)
-        if game.m_castle_BK:
-            castling_right |= (1 << 2)
-        if game.m_castle_BQ:
-            castling_right |= (1 << 3)
-        castling_rights.append(castling_right)
-        en_passant_targets.append(-1 if game.m_en_passant_target is None else game.m_en_passant_target)
-        halfmoves.append(game.get_halfmove())
-
+    
     block_size = 64
     while block_size <= search_depth:
         block_size *= 2
-    grid_size = len(games)
 
-    d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8))
-    d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int8))
-    d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int8))
-    d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int8))
+    n_games_per_stream = 32
+    n_streams          = (len(games) - 1) // n_games_per_stream + 1
 
-    d_scores           = cuda.device_array(len(games), dtype = np.float32)
-    d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
+    streams           = [None] * n_streams
+    output_devices    = [None] * n_streams
+    evaluation_counts = [None] * n_streams
+    for s in range(n_streams):
+        boards             = []
+        castling_rights    = []
+        en_passant_targets = []
+        halfmoves          = []
 
-    evaluate_move_parallel_2_kernel[grid_size, block_size, 0, (search_depth + 1) * 80](d_boards, side, d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth, d_scores, d_evaluation_count, -1000000.0, 1000000.0, alpha_beta_prunning, move_sorting)
+        n_games = 0
+        count = n_games_per_stream
+        while count > 0 and len(games) > 0:
+            n_games += 1
+            count -= 1
 
-    evaluation_count += d_evaluation_count.copy_to_host()[0]
-    return d_scores.copy_to_host()
+            game = games.pop(0)
+            boards += game.get_board()
+            castling_right = 0x00
+            if game.m_castle_WK:
+                castling_right |= (1 << 0)
+            if game.m_castle_WQ:
+                castling_right |= (1 << 1)
+            if game.m_castle_BK:
+                castling_right |= (1 << 2)
+            if game.m_castle_BQ:
+                castling_right |= (1 << 3)
+            castling_rights.append(castling_right)
+            en_passant_targets.append(-1 if game.m_en_passant_target is None else game.m_en_passant_target)
+            halfmoves.append(game.get_halfmove())
+
+        streams[s] = cuda.stream()
+
+        grid_size = n_games
+
+        d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8), stream = streams[s])
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int8), stream = streams[s])
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int8), stream = streams[s])
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int8), stream = streams[s])
+
+        d_scores           = cuda.device_array(n_games, dtype = np.float32, stream = streams[s])
+        d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32), stream = streams[s])
+
+        output_devices[s]    = d_scores
+        evaluation_counts[s] = d_evaluation_count
+
+        evaluate_move_parallel_2_kernel[grid_size, block_size, streams[s], (search_depth + 1) * 80](d_boards, side, d_casting_rights, d_en_passant_targets, d_halfmoves, search_depth, d_scores, d_evaluation_count, -1000000.0, 1000000.0, alpha_beta_pruning, move_sorting)
+
+    for s in range(n_streams):
+        output_devices[s]    = output_devices[s].copy_to_host(stream = streams[s])
+        evaluation_counts[s] = evaluation_counts[s].copy_to_host(stream = streams[s])
+
+        streams[s].synchronize()
+
+    scores = []
+    for s in range(n_streams):
+        scores += list(output_devices[s])
+        evaluation_count += evaluation_counts[s][0]
+
+    return scores
 
 def find_move_parallel_4(
     game, 
     search_depth,
-    alpha_beta_prunning = False, 
+    alpha_beta_pruning = False, 
     move_sorting        = False
 ):
     global evaluation_count
@@ -2081,7 +2110,7 @@ def find_move_parallel_4(
             game_copy.move(move)
             games.append(game_copy)
 
-        scores = evaluate_move_parallel_4(games, search_depth - 1, alpha_beta_prunning, move_sorting)
+        scores = evaluate_move_parallel_4(games, search_depth - 1, alpha_beta_pruning, move_sorting)
         for idx, score in enumerate(scores):
             if -score > best_eval:
                 best_eval = -score
@@ -2091,6 +2120,315 @@ def find_move_parallel_4(
         best_eval = 0.0
 
     return best_move, best_eval
+
+# Parallel implementation 5
+
+@cuda.jit
+def evaluate_move_parallel_5_kernel(
+    boards,
+    sides,
+    castling_rights,
+    en_passant_targets,
+    halfmoves,
+    indices,
+    search_depth,
+    alpha_beta,
+    out_move_index,
+    mutex,
+    current_depth,
+    counts_by_depth,
+    search_depths,
+    deepest_depth,
+    alpha_beta_pruning,
+    move_sorting,
+    evaluation_count
+):
+    c_piece_base_values         = cuda.const.array_like(piece_base_values)
+    c_piece_square_table_king   = cuda.const.array_like(piece_square_table_king)
+    c_piece_square_table_pawn   = cuda.const.array_like(piece_square_table_pawn)
+    c_piece_square_table_knight = cuda.const.array_like(piece_square_table_knight)
+    c_piece_square_table_bishop = cuda.const.array_like(piece_square_table_bishop)
+    c_piece_square_table_rook   = cuda.const.array_like(piece_square_table_rook)
+    c_piece_square_table_queen  = cuda.const.array_like(piece_square_table_queen)
+
+    board_id           = cuda.blockIdx.x
+    index              = indices[board_id]
+    local_search_depth = search_depths[board_id]
+
+    s_shared_i8  = cuda.shared.array(shape = 0, dtype = np.int8)
+    s_shared_i32 = cuda.shared.array(shape = 0, dtype = np.int32)
+    s_shared_f32 = cuda.shared.array(shape = 0, dtype = np.float32)
+
+    s_boards             = s_shared_i8 [                        : 64 * (search_depth + 1)]
+    s_castling_rights    = s_shared_i8 [64 * (search_depth + 1) : 65 * (search_depth + 1)]
+    s_en_passant_targets = s_shared_i8 [65 * (search_depth + 1) : 66 * (search_depth + 1)]
+    s_halfmoves          = s_shared_i8 [66 * (search_depth + 1) : 67 * (search_depth + 1)]
+    s_status             = s_shared_i32[17 * (search_depth + 1) : 18 * (search_depth + 1)]
+    s_alphas             = s_shared_f32[18 * (search_depth + 1) : 19 * (search_depth + 1)]
+    s_betas              = s_shared_f32[19 * (search_depth + 1) : 20 * (search_depth + 1)]
+
+    s_should_break = cuda.shared.array(shape = 1, dtype = np.int32)
+
+    if cuda.threadIdx.x == 0:
+        depth = deepest_depth
+        while depth < local_search_depth:
+            while cuda.atomic.add(counts_by_depth, depth - deepest_depth, 0) > 0:
+                pass
+            if cuda.atomic.compare_and_swap(current_depth, depth, depth + 1) == depth:
+                lock(mutex, 0)
+                alpha_beta[0] *= -1.0
+                out_move_index[0] = -1
+                unlock(mutex, 0)
+            depth += 1
+    cuda.syncthreads()
+
+    if cuda.threadIdx.x < 64:
+        s_boards[cuda.threadIdx.x] = boards[board_id * 64 + cuda.threadIdx.x]
+        if cuda.threadIdx.x == 0:
+            s_castling_rights[0]    = castling_rights[board_id]
+            s_en_passant_targets[0] = en_passant_targets[board_id]
+            s_halfmoves[0]          = halfmoves[board_id]
+
+            lock(mutex, 0)
+
+            s_should_break[0] = 0
+
+            s_alphas[0] = -alpha_beta[1]
+            s_betas[0]  = -alpha_beta[0]
+            
+            if alpha_beta[0] >= alpha_beta[1]:
+                s_should_break[0] = 1
+
+            unlock(mutex, 0)
+
+            for i in range(local_search_depth + 1):
+                s_status[i] = 1
+            s_status[0] = 0
+    cuda.syncthreads()
+
+    if alpha_beta_pruning and s_should_break[0] != 0:
+        return
+
+    if cuda.threadIdx.x <= local_search_depth:
+        _side = sides[board_id] > 0.0
+        if cuda.threadIdx.x % 2 != 0:
+            _side = not _side
+
+        out_moves   = cuda.local.array(256, dtype = np.int32)
+        move_scores = cuda.local.array(256, dtype = np.float32)
+
+        while True:
+            while cuda.atomic.add(s_status, cuda.threadIdx.x, 0) == 1:
+                continue
+
+            if cuda.atomic.add(s_status, cuda.threadIdx.x, 0) > 1:
+                break
+            
+            cuda.atomic.add(evaluation_count, 0, 1)
+            if cuda.threadIdx.x == local_search_depth:
+                evaluation = 0.0
+                for i in range(64):
+                    evaluation += piece_value_device(s_boards[cuda.threadIdx.x * 64 + i], i, 
+                        c_piece_base_values,
+                        c_piece_square_table_king,
+                        c_piece_square_table_pawn,
+                        c_piece_square_table_knight,
+                        c_piece_square_table_bishop,
+                        c_piece_square_table_rook,
+                        c_piece_square_table_queen)
+                    
+                s_alphas[cuda.threadIdx.x] = evaluation * (1.0 if _side else -1.0)
+            else:
+                if s_halfmoves[cuda.threadIdx.x] >= 100:
+                    s_alphas[cuda.threadIdx.x] = 0.0
+                else:
+                    castling_right = s_castling_rights[cuda.threadIdx.x]
+                    castle_WK = (castling_right & 0x01 != 0)
+                    castle_WQ = (castling_right & 0x02 != 0)
+                    castle_BK = (castling_right & 0x04 != 0)
+                    castle_BQ = (castling_right & 0x08 != 0)
+
+                    if move_sorting:
+                        n_moves, attacked_positions = generate_all_moves_sorted_device(s_boards[cuda.threadIdx.x * 64:], _side, castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x], out_moves, move_scores, c_piece_base_values)
+                    else:
+                        n_moves, attacked_positions = generate_all_moves_device(s_boards[cuda.threadIdx.x * 64:], _side, castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x], out_moves)
+
+                    if n_moves <= 0:
+                        king_position = get_king_position_device(s_boards[cuda.threadIdx.x * 64:], _side)
+                        if (attacked_positions & (1 << king_position)) == 0:
+                            s_alphas[cuda.threadIdx.x] = 0.0
+                    else:
+                        for move_index in range(n_moves):
+                            for i in range(64):
+                                s_boards[cuda.threadIdx.x * 64 + 64 + i] = s_boards[cuda.threadIdx.x * 64 + i]
+
+                            _, _castle_WK, _castle_WQ, _castle_BK, _castle_BQ, _en_passant_target, _halfmove = move_device(
+                                s_boards[cuda.threadIdx.x * 64 + 64 : cuda.threadIdx.x * 64 + 128], _side, out_moves[move_index], 
+                                castle_WK, castle_WQ, castle_BK, castle_BQ, s_en_passant_targets[cuda.threadIdx.x], s_halfmoves[cuda.threadIdx.x])
+                            _castling_right = 0x00
+                            if _castle_WK:
+                                _castling_right |= (1 << 0)
+                            if _castle_WQ:
+                                _castling_right |= (1 << 1)
+                            if _castle_BK:
+                                _castling_right |= (1 << 2)
+                            if _castle_BQ:
+                                _castling_right |= (1 << 3)
+                            s_castling_rights[cuda.threadIdx.x + 1]    = _castling_right
+                            s_en_passant_targets[cuda.threadIdx.x + 1] = _en_passant_target
+                            s_halfmoves[cuda.threadIdx.x + 1]          = _halfmove
+                            s_alphas[cuda.threadIdx.x + 1]             = -s_betas[cuda.threadIdx.x]
+                            s_betas[cuda.threadIdx.x + 1]              = -s_alphas[cuda.threadIdx.x]
+
+                            cuda.atomic.exch(s_status, cuda.threadIdx.x + 1, 0)
+                            while cuda.atomic.add(s_status, cuda.threadIdx.x + 1, 0) == 0:
+                                continue
+
+                            if alpha_beta_pruning and -s_alphas[cuda.threadIdx.x + 1] >= s_betas[cuda.threadIdx.x]:
+                                s_alphas[cuda.threadIdx.x] = s_betas[cuda.threadIdx.x]
+                                break
+                            
+                            if -s_alphas[cuda.threadIdx.x + 1] > s_alphas[cuda.threadIdx.x]:
+                                s_alphas[cuda.threadIdx.x] = -s_alphas[cuda.threadIdx.x + 1]
+
+            if cuda.threadIdx.x == 0:
+                for i in range(search_depth + 1):
+                    cuda.atomic.exch(s_status, i, 2)
+            else:
+                cuda.atomic.exch(s_status, cuda.threadIdx.x, 1)
+    cuda.syncthreads()
+
+    if cuda.threadIdx.x == 0:
+        lock(mutex, 0)
+        eval = -s_alphas[0]
+        if eval > alpha_beta[0] or (eval == alpha_beta[0] and index < out_move_index[0]):
+            alpha_beta[0] = eval
+            out_move_index[0] = index
+        unlock(mutex, 0)
+        cuda.atomic.add(counts_by_depth, local_search_depth - deepest_depth, -1)
+
+def find_move_parallel_5(
+    game, 
+    search_depth,
+    alpha_beta_pruning = False, 
+    move_sorting       = False
+):
+    global evaluation_count
+    evaluation_count = 1
+
+    current_depth = search_depth - 1
+    current_game  = game.copy()
+
+    games                 = []
+    indices               = []
+    search_depths         = []
+    games_counts_by_depth = []
+    deepest_eval          = 0.0 
+    best_move             = None
+    best_eval             = 0.0
+
+    original_moves = game.generate_all_moves()
+
+    while current_depth >= 0:
+        moves = current_game.generate_all_moves()
+        if len(moves) > 0:
+            first_move = moves.pop(0)
+            if current_depth == search_depth - 1:
+                best_move = first_move
+            if len(moves) > 0:
+                new_games = []
+                indices = list(range(len(moves))) + indices
+                for move in moves:
+                    game_copy = current_game.copy()
+                    game_copy.move(move)
+                    new_games.append(game_copy)
+                games = new_games + games
+                games_counts_by_depth = [len(moves)] + games_counts_by_depth
+            search_depths = [current_depth] * len(moves) + search_depths
+            
+            current_game.move(first_move)
+            deepest_eval = current_game.evaluate()
+            evaluation_count += 1
+            if current_depth == search_depth - 1:
+                best_eval = deepest_eval
+            current_depth -= 1
+        else:
+            deepest_eval = -1000000.0 if current_game.is_current_side_in_check() else 0.0
+            break
+    deepest_depth = current_depth + 1
+
+    if len(games) <= 0:
+        return best_move, best_eval
+
+    n_games_per_stream = 128
+
+    n_streams = (len(games) - 1) // n_games_per_stream + 1
+    streams   = [None] * n_streams
+
+    block_size = 64
+    while block_size < search_depth:
+        block_size *= 2
+
+    d_alpha_beta       = cuda.to_device(np.array([deepest_eval, 1000000.0], dtype = np.float32))
+    d_out_move_index   = cuda.to_device(np.array([-1]                     , dtype = np.int32))
+    d_mutex            = cuda.to_device(np.array([0]                      , dtype = np.int32))
+    d_current_depth    = cuda.to_device(np.array([deepest_depth]          , dtype = np.int32))
+    d_counts_by_depth  = cuda.to_device(np.array(games_counts_by_depth    , dtype = np.int32))
+    d_evaluation_count = cuda.to_device(np.zeros(1, dtype = np.int32))
+
+    for s in range(n_streams):
+        streams[s] = cuda.stream()
+
+        boards             = []
+        sides              = []
+        castling_rights    = []
+        en_passant_targets = []
+        halfmoves          = []
+        sub_indices        = []
+        sub_search_depths  = []
+
+        count = 0
+        while count < n_games_per_stream and len(games) > 0:
+            count += 1
+
+            sub_indices.append(indices.pop(0))
+            sub_search_depths.append(search_depths.pop(0))
+            g = games.pop(0)
+
+            boards += g.get_board()
+            sides.append(1 if g.side_to_move() else -1)
+            castling_right = 0x00
+            if g.m_castle_WK:
+                castling_right |= (1 << 0)
+            if g.m_castle_WQ:
+                castling_right |= (1 << 1)
+            if g.m_castle_BK:
+                castling_right |= (1 << 2)
+            if g.m_castle_BQ:
+                castling_right |= (1 << 3)
+            castling_rights.append(castling_right)
+            en_passant_targets.append(-1 if g.m_en_passant_target is None else g.m_en_passant_target)
+            halfmoves.append(g.get_halfmove())
+
+        grid_size = count
+
+        d_boards             = cuda.to_device(np.array(boards            , dtype = np.int8) , stream = streams[s])
+        d_sides              = cuda.to_device(np.array(sides             , dtype = np.int8) , stream = streams[s])
+        d_casting_rights     = cuda.to_device(np.array(castling_rights   , dtype = np.int8) , stream = streams[s])
+        d_en_passant_targets = cuda.to_device(np.array(en_passant_targets, dtype = np.int8) , stream = streams[s])
+        d_halfmoves          = cuda.to_device(np.array(halfmoves         , dtype = np.int8) , stream = streams[s])
+        d_indices            = cuda.to_device(np.array(sub_indices       , dtype = np.int32), stream = streams[s])
+        d_search_depths      = cuda.to_device(np.array(sub_search_depths , dtype = np.int32), stream = streams[s])
+
+        evaluate_move_parallel_5_kernel[grid_size, block_size, streams[s], search_depth * 80](d_boards, d_sides, d_casting_rights, d_en_passant_targets, d_halfmoves, d_indices, search_depth - 1, d_alpha_beta, d_out_move_index, d_mutex, d_current_depth, d_counts_by_depth, d_search_depths, deepest_depth, alpha_beta_pruning, move_sorting, d_evaluation_count)
+
+    for stream in streams:
+        stream.synchronize()
+
+    evaluation_count += d_evaluation_count.copy_to_host()[0]
+
+    move_index = d_out_move_index.copy_to_host()[0] + 1
+    return original_moves[move_index], d_alpha_beta.copy_to_host()[0]
 
 # Versions:
 #
@@ -2119,38 +2457,45 @@ def find_move(game, search_depth, version):
         case 0:
             return find_move_sequencial(game, search_depth)
         case 1:
-            return find_move_sequencial(game, search_depth, alpha_beta_prunning = True)
+            return find_move_sequencial(game, search_depth, alpha_beta_pruning = True)
         case 2:
-            return find_move_sequencial(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+            return find_move_sequencial(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
         case 3: 
             return find_move_parallel_1(game, search_depth)
         case 4: 
-            return find_move_parallel_1(game, search_depth, alpha_beta_prunning = True)
+            return find_move_parallel_1(game, search_depth, alpha_beta_pruning = True)
         case 5: 
-            return find_move_parallel_1(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+            return find_move_parallel_1(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
         case 6:
             return find_move_parallel_2(game, search_depth)
         case 7:
-            return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True)
+            return find_move_parallel_2(game, search_depth, alpha_beta_pruning = True)
         case 8:
-            return find_move_parallel_2(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+            return find_move_parallel_2(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
         case 9:
             return find_move_parallel_3(game, search_depth)
         case 10:
-            return find_move_parallel_3(game, search_depth, alpha_beta_prunning = True)
+            return find_move_parallel_3(game, search_depth, alpha_beta_pruning = True)
         case 11:
-            return find_move_parallel_3(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+            return find_move_parallel_3(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
         case 12:
             return find_move_parallel_4(game, search_depth)
         case 13:
-            return find_move_parallel_4(game, search_depth, alpha_beta_prunning = True)
+            return find_move_parallel_4(game, search_depth, alpha_beta_pruning = True)
         case 14:
-            return find_move_parallel_4(game, search_depth, alpha_beta_prunning = True, move_sorting = True)
+            return find_move_parallel_4(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
+        case 15:
+            return find_move_parallel_5(game, search_depth)
+        case 16:
+            return find_move_parallel_5(game, search_depth, alpha_beta_pruning = True)
+        case 17:
+            return find_move_parallel_5(game, search_depth, alpha_beta_pruning = True, move_sorting = True)
 
 def compile_kernels():
     game = ChessGame('k7/8/8/8/8/8/8/K7 w - - 0 1')
     find_move(game, 1, 3)
     find_move(game, 2, 6)
     find_move(game, 2, 9)
+    find_move(game, 2, 15)
 
 compile_kernels()
