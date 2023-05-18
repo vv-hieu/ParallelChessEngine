@@ -1,0 +1,10 @@
+Version,Score,Execution time,No. Evaluations
+Sequencial (basic),-1.2,357.88707,3107697
+Sequencial (alpha-beta),-1.2,2.10089,16293
+Sequencial (alpha-beta + move sorting),-1.2,1.43835,8579
+Parallel v1 (basic),-1.2000000476837158,105.84559,3107697
+Parallel v1 (alpha-beta),-1.2000000476837158,3.67952,107193
+Parallel v1 (alpha-beta + move sorting),-1.2000000476837158,3.6042,102329
+Parallel v2 (basic),-1.2000000476837158,2.16347,3107697
+Parallel v2 (alpha-beta),-1.2000000476837158,0.28886,19804
+Parallel v2 (alpha-beta + move sorting),-1.2000000476837158,0.34249,12138

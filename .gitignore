@@ -138,3 +138,16 @@ parallelv1_minimax_alphabeta_movesorting.py
 parallelv2_minimax_basic.py
 parallelv2_minimax_alphabeta.py
 parallelv2_minimax_alphabeta_movesorting.py
+parallelv3_minimax_basic.py
+parallelv3_minimax_alphabeta.py
+parallelv3_minimax_alphabeta_movesorting.py
+parallelv4_minimax_basic.py
+parallelv4_minimax_alphabeta.py
+parallelv4_minimax_alphabeta_movesorting.py
+parallelv5_minimax_basic.py
+parallelv5_minimax_alphabeta.py
+parallelv5_minimax_alphabeta_movesorting.py
+
+# Nsight system reports
+*.nsys-rep
+*.sqlite
