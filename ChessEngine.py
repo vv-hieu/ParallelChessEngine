@@ -2451,6 +2451,10 @@ def find_move_parallel_5(
 # -  12: Parallel v4
 # -  13: Parallel v4 with alpha - beta pruning
 # -  14: Parallel v4 with alpha - beta pruning and move sorting
+#
+# -  15: Parallel v5
+# -  16: Parallel v5 with alpha - beta pruning
+# -  17: Parallel v5 with alpha - beta pruning and move sorting
 
 def find_move(game, search_depth, version):
     match version:

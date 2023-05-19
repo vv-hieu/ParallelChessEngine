@@ -1,10 +1,10 @@
 Version,Score,Execution time,No. Evaluations
-Parallel v3 (basic),-1.2000000476837158,2.17428,3107697
-Parallel v3 (alpha-beta),-1.2000000476837158,0.31456,19804
-Parallel v3 (alpha-beta + move sorting),-1.2000000476837158,0.30966,12138
-Parallel v4 (basic),-1.2000000476837158,1.10492,3107697
-Parallel v4 (alpha-beta),-1.2000000476837158,0.78564,754772
-Parallel v4 (alpha-beta + move sorting),-1.2000000476837158,0.38907,232047
-Parallel v5 (basic),-1.2000000476837158,2.33263,3107697
-Parallel v5 (alpha-beta),-1.2000000476837158,0.19738,18803
-Parallel v5 (alpha-beta + move sorting),-1.2000000476837158,0.18182,10165
+Parallel v3 (basic),-1.2000000476837158,2.08506,3107697
+Parallel v3 (alpha-beta),-1.2000000476837158,0.2715,19804
+Parallel v3 (alpha-beta + move sorting),-1.2000000476837158,0.16638,12138
+Parallel v4 (basic),-1.2000000476837158,1.80142,3107697
+Parallel v4 (alpha-beta),-1.2000000476837158,1.17332,754772
+Parallel v4 (alpha-beta + move sorting),-1.2000000476837158,0.42432,232047
+Parallel v5 (basic),-1.2000000476837158,2.43181,3107697
+Parallel v5 (alpha-beta),-1.2000000476837158,0.23977,18803
+Parallel v5 (alpha-beta + move sorting),-1.2000000476837158,0.05515,10165
